@@ -1,209 +1,78 @@
-import { useEffect, useReducer } from 'react';
-import { Autocomplete, Box, TextField, Button, Typography, Stack } from '@mui/material';
-import useLocalStorageState from 'use-local-storage-state';
-import SearchIcon from '@mui/icons-material/Search';
-import { fetchWeatherMulti } from '../api/weatherApi';
-import SearchResult from './SearchResult';
+// src/components/Search.jsx
+import { useMemo, useState, useEffect } from 'react';
+import { Box, Tabs, Tab } from '@mui/material';
 import PropTypes from 'prop-types';
 
-// ----- Reducer setup -----
-const initialState = {
-  inputValue: '',
-  query: '',
-  results: [],     // [{ location, temps }]
-  loading: false,
-  error: '',
-};
+import SearchText from './SearchText.jsx';
+import { GeoProvider } from '../state/geoContext.jsx';
+import SearchMap from './SearchMap.jsx';
 
-const ACTIONS = {
-  SET_INPUT: 'SET_INPUT',
-  START_SEARCH: 'START_SEARCH',
-  SEARCH_SUCCESS: 'SEARCH_SUCCESS',
-  SEARCH_ERROR: 'SEARCH_ERROR',
-  RESET: 'RESET',
-};
-
-function reducer(state, action) {
-  switch (action.type) {
-    case ACTIONS.SET_INPUT:
-      return { ...state, inputValue: action.payload };
-    case ACTIONS.START_SEARCH:
-      return {
-        ...state,
-        query: action.payload, // normalized query to trigger effect
-        loading: true,
-        error: '',
-        results: [],
-      };
-    case ACTIONS.SEARCH_SUCCESS:
-      return {
-        ...state,
-        loading: false,
-        error: '',
-        results: action.payload,
-      };
-    case ACTIONS.SEARCH_ERROR:
-      return {
-        ...state,
-        loading: false,
-        results: [],
-        error: action.payload || 'Search failed.',
-      };
-    case ACTIONS.RESET:
-      // Keep inputValue to avoid wiping the field; reset the rest.
-      return {
-        ...state,
-        query: '',
-        results: [],
-        loading: false,
-        error: '',
-      };
-    default:
-      return state;
-  }
+function TabPanel({ hidden, labelledBy, children }) {
+  // Accesible: mantiene contenido montado, solo oculta visualmente
+  return (
+    <Box
+      role="tabpanel"
+      aria-labelledby={labelledBy}
+      hidden={hidden}
+      sx={{ display: hidden ? 'none' : 'block' }}
+    >
+      {children}
+    </Box>
+  );
 }
+
 function Search({ isFavorite, onAddFavorite }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [mode, setMode] = useState('text');
 
-  // Search history persisted in localStorage
-  const [keywordList, setKeywordList] = useLocalStorageState('WeatherApp/Search/KeywordList', {
-    defaultValue: [],
-  });
-
-  // Effect triggered when "query" changes
+  // Montamos el tab de mapa solo la primera vez que se visita; luego queda montado.
+  const [mapHasMounted, setMapHasMounted] = useState(false);
   useEffect(() => {
-    const run = async () => {
-      try {
-        const arr = await fetchWeatherMulti(state.query);
-        if (arr.length) {
-          dispatch({ type: ACTIONS.SEARCH_SUCCESS, payload: arr });
-          // Add to history if not present
-          if (state.query && !keywordList.includes(state.query)) {
-            setKeywordList([...keywordList, state.query]);
-          }
-        } else {
-          dispatch({
-            type: ACTIONS.SEARCH_ERROR,
-            payload: 'No se encontraron ubicaciones para tu búsqueda.',
-          });
-        }
-      } catch {
-        dispatch({
-          type: ACTIONS.SEARCH_ERROR,
-          payload: 'Ocurrió un error realizando la búsqueda.',
-        });
-      }
-    };
+    if (mode === 'map' && !mapHasMounted) setMapHasMounted(true);
+  }, [mode, mapHasMounted]);
 
-    if (state.query) run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.query]);
-
-  // Handlers
-  const handleSearch = () => {
-    const trimmed = state.inputValue.trim();
-    if (!trimmed) {
-      dispatch({
-        type: ACTIONS.SEARCH_ERROR,
-        payload: 'Ingresa una ciudad para buscar.',
-      });
-      return;
-    }
-    dispatch({ type: ACTIONS.START_SEARCH, payload: trimmed });
-  };
-
-  const handleClearHistory = () => {
-    setKeywordList([]);
-  };
+  const tabs = useMemo(
+    () => [
+      { value: 'text', label: 'Buscar por texto', id: 'tab-text', panelId: 'panel-text' },
+      { value: 'map',  label: 'Elegir en mapa',  id: 'tab-map',  panelId: 'panel-map'  },
+    ],
+    []
+  );
 
   return (
     <>
+      {/* Header + Tabs */}
       <Box sx={{ m: 2, maxWidth: 900, mx: 'auto', bgcolor: 'white' }}>
-        <Autocomplete
-          freeSolo
-          options={keywordList}
-          value={state.inputValue}
-          onInputChange={(_, newInputValue) =>
-            dispatch({ type: ACTIONS.SET_INPUT, payload: newInputValue })
-          }
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Buscar ciudad (p. ej. 'Santiago, CL' o 'Columbus, OH, US')"
-              variant="outlined"
-              fullWidth
-              sx={{ mb: 2 }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSearch();
-              }}
+        <Tabs
+          value={mode}
+          onChange={(_, v) => setMode(v)}
+          aria-label="Search modes"
+          sx={{ mb: 2 }}
+        >
+          {tabs.map(t => (
+            <Tab
+              key={t.value}
+              value={t.value}
+              label={t.label}
+              id={t.id}
+              aria-controls={t.panelId}
             />
-          )}
-        />
+          ))}
+        </Tabs>
+      </Box>
 
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-          <Button
-            variant="contained"
-            color="primary"
-            fullWidth
-            onClick={handleSearch}
-            startIcon={<SearchIcon />}
-            disabled={state.loading}
-          >
-            {state.loading ? 'Buscando...' : 'Buscar'}
-          </Button>
+      {/* ---- TEXTO (siempre montado) ---- */}
+      <TabPanel hidden={mode !== 'text'} labelledBy="tab-text" id="panel-text" aria-labelledby="tab-text">
+        <SearchText isFavorite={isFavorite} onAddFavorite={onAddFavorite} />
+      </TabPanel>
 
-          {/* Clear history button shows only if there is something to clear */}
-          {keywordList.length > 0 && (
-            <Button
-              variant="outlined"
-              color="inherit"
-              fullWidth
-              onClick={handleClearHistory}
-              disabled={state.loading}
-            >
-              Limpiar historial
-            </Button>
-          )}
-        </Stack>
-
-        {state.error && (
-          <Box sx={{ mt: 1, color: 'error.main', fontSize: 14 }}>
-            {state.error}
-          </Box>
+      {/* ---- MAPA (monta al primer ingreso y queda montado) ---- */}
+      <TabPanel hidden={mode !== 'map'} labelledBy="tab-map" id="panel-map" aria-labelledby="tab-map">
+        {mapHasMounted && (
+          <GeoProvider>
+            <SearchMap />
+          </GeoProvider>
         )}
-      </Box>
-
-      {/* Results grid */}
-      <Box
-        sx={{
-          m: 2,
-          maxWidth: 1200,
-          mx: 'auto',
-          display: 'grid',
-          gap: 2,
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-        }}
-      >
-        {state.results.map(({ location, temps }) => {
-          const label = `${location.name}${location.admin1 ? `, ${location.admin1}` : ''}, ${location.country_code}`;
-          return (
-            <SearchResult
-              key={`${location.id}-${location.latitude}-${location.longitude}`}
-              label={label}
-              location={location}
-              temps={temps}
-              isFavorite={isFavorite}
-              onAddFavorite={onAddFavorite}
-            />
-          );
-        })}
-      </Box>
-
-      {!!state.results.length && (
-        <Typography variant="caption" sx={{ display: 'block', textAlign: 'center', mb: 3 }}>
-          Ordenado por población (descendente).
-        </Typography>
-      )}
+      </TabPanel>
     </>
   );
 }
