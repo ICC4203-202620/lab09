@@ -1,4 +1,3 @@
-// src/components/Search.jsx
 import { useMemo, useState, useEffect } from 'react';
 import { Box, Tabs, Tab } from '@mui/material';
 import PropTypes from 'prop-types';
@@ -6,9 +5,10 @@ import PropTypes from 'prop-types';
 import SearchText from './SearchText.jsx';
 import { GeoProvider } from '../state/geoContext.jsx';
 import SearchMap from './SearchMap.jsx';
+import { SearchResultsProvider } from '../state/searchResultsContext.jsx';
+import SearchResultsList from './SearchResultsList.jsx';
 
 function TabPanel({ hidden, labelledBy, children }) {
-  // Accesible: mantiene contenido montado, solo oculta visualmente
   return (
     <Box
       role="tabpanel"
@@ -23,12 +23,8 @@ function TabPanel({ hidden, labelledBy, children }) {
 
 function Search({ isFavorite, onAddFavorite }) {
   const [mode, setMode] = useState('text');
-
-  // Montamos el tab de mapa solo la primera vez que se visita; luego queda montado.
   const [mapHasMounted, setMapHasMounted] = useState(false);
-  useEffect(() => {
-    if (mode === 'map' && !mapHasMounted) setMapHasMounted(true);
-  }, [mode, mapHasMounted]);
+  useEffect(() => { if (mode === 'map' && !mapHasMounted) setMapHasMounted(true); }, [mode, mapHasMounted]);
 
   const tabs = useMemo(
     () => [
@@ -39,7 +35,7 @@ function Search({ isFavorite, onAddFavorite }) {
   );
 
   return (
-    <>
+    <SearchResultsProvider>
       {/* Header + Tabs */}
       <Box sx={{ m: 2, maxWidth: 900, mx: 'auto', bgcolor: 'white' }}>
         <Tabs
@@ -62,7 +58,7 @@ function Search({ isFavorite, onAddFavorite }) {
 
       {/* ---- TEXTO (siempre montado) ---- */}
       <TabPanel hidden={mode !== 'text'} labelledBy="tab-text" id="panel-text" aria-labelledby="tab-text">
-        <SearchText isFavorite={isFavorite} onAddFavorite={onAddFavorite} />
+        <SearchText />
       </TabPanel>
 
       {/* ---- MAPA (monta al primer ingreso y queda montado) ---- */}
@@ -73,7 +69,13 @@ function Search({ isFavorite, onAddFavorite }) {
           </GeoProvider>
         )}
       </TabPanel>
-    </>
+
+      {/* ---- LISTA DE RESULTADOS COMPARTIDA ---- */}
+      <SearchResultsList
+        isFavorite={isFavorite}
+        onAddFavorite={onAddFavorite}
+      />
+    </SearchResultsProvider>
   );
 }
 
