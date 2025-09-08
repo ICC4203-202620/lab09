@@ -1,4 +1,4 @@
-# Laboratorio 4: Formularios, validaciones, e introducción a APIs de georeferenciación
+# Laboratorio 5: Mapas y georeferenciación
 
 En este laboratorio continuaremos desarrollando la aplicación de clima con React y MUI. La aplicación utiliza la API de [Open-Meteo](https://open-meteo.com/) para acceder a información climática.
 
@@ -29,95 +29,437 @@ El comando anterior ejecuta la aplicación en modo de desarrollo. Puedes abrir e
 
 ## Marco Teórico
 
-### Formularios en React con Formik
+### API JavaScript de Google Maps
 
-Vimos en la clase 4 que la implementación de formularios en React puede verse facilitada utilizando la librería [Formik](https://formik.org/docs/overview). Formik es una de las librerías más utilizadas en el ecosistema de React para manejar formularios. Trabajar con formularios en React puede ser tedioso porque hay que manejar manualmente el estado de cada input (useState), escribir funciones para validar campos y mostrar errores, implementar la lógica de submit (qué hacer con los datos), y controlar cuándo mostrar mensajes de error (al escribir, al salir del campo, al enviar).
+La Google Maps JavaScript API es la librería que nos permite incrustar un mapa interactivo de Google en una aplicación web. A diferencia de la Geocoding API o la Places API, que son servicios HTTP “puros”, esta API está pensada para ejecutarse en el navegador y entregar controles gráficos, eventos, y objetos de alto nivel para que el usuario pueda interactuar directamente con el mapa.
 
-Formik abstrae toda esta lógica repetitiva y ofrece un marco coherente para manejar formularios complejos de forma más declarativa, estructurada y menos propensa a errores.
+¿Qué ofrece?
 
-Las principales características de Formik son las siguientes:
+* Renderizar mapas (en distintos estilos o map IDs).
+* Dibujar elementos gráficos (markers, polígonos, líneas).
+* Manejar eventos (ejemplo: click en el mapa o en un marcador).
+* Integrar librerías adicionales:
+  * `places`: autocompletado, búsqueda de negocios, hoteles, restaurantes, etc.
+  * `marker`: marcadores avanzados con HTML y estilos personalizados.
+  * `geometry`: utilidades para distancias, áreas, coordenadas.
 
-* Manejo automático de estado de formulario
-  * Centraliza los valores de todos los inputs en un objeto (values).
-  * Controla cambios con `handleChange` y `handleBlur`.
-* Validación integrada
-  * Soporta validación síncrona y asíncrona.
-  * Se integra de forma natural con librerías como Yup para definir esquemas de validación declarativos.
-* Manejo de errores y touched
-  * Proporciona objetos (`errors`, `touched`) para saber qué campos tienen errores y cuándo mostrarlos.
-* Manejo de envío (submit)
-  * Proporciona un `handleSubmit` que centraliza la lógica al enviar el formulario.
-  * Maneja estados como `isSubmitting` para bloquear botones mientras se procesa.
-* Componentes y hooks listos
-  * `Formik` y `Form` para estructurar formularios.
-  * `Field` y `ErrorMessage` para inputs y errores.
-  * `useFormik` hook para control granular en componentes funcionales.
-* Escalabilidad
-  * Facilita trabajar desde formularios simples con un par de inputs hasta formularios grandes y dinámicos con secciones condicionales.
+**Markers**
 
-### Validaciones con Yup
+Un marker es un objeto gráfico que representa una posición geográfica en el mapa, indicado por sus coordenadas de latitud y longitud.
 
-En formularios (o en cualquier parte de una aplicación) es común tener que validar datos. Sin una librería, habría que escribir funciones manuales para cada campo, repitiendo lógica como "el nombre no puede estar vacío", "el email debe tener formato válido", y "la fecha debe ser anterior a hoy". Esto genera mucho código repetitivo, difícil de mantener y propenso a inconsistencias.
+* El marcador más básico es un ícono (generalmente un pin rojo).
+* Se puede personalizar con otros íconos o incluso con HTML/CSS (usando `AdvancedMarkerElement`).
+* Permite asociar eventos: por ejemplo, escuchar un click en un marker para abrir más información.
 
-[Yup](https://github.com/jquense/yup?tab=readme-ov-file) resuelve este problema ofreciendo una forma declarativa y centralizada de definir reglas de validación como esquemas.
+Ejemplo básico en la API clásica:
 
-Las principales funciones de Yup son las siguientes:
+```js
+const marker = new google.maps.Marker({
+  position: { lat: -33.4489, lng: -70.6693 },
+  map: map,
+  title: "Santiago de Chile"
+});
+```
 
-* Esquemas declarativos
-  * Permite describir la forma de un objeto de datos (shape) y sus reglas de validación.
-  * Ejemplo: `yup.object({ email: yup.string().email().required() })`.
-* Validación poderosa y expresiva
-  * Tipos primitivos soportados: `string`, `number`, `boolean`, `date`, `array`, `object`.
-  * Métodos encadenables (`.required()`, `.min()`, `.max()`, `.matches()`, etc.).
-  * Validación condicional con `.when()`.
-* Mensajes de error personalizables
-  * Cada regla puede tener su propio mensaje de error.
-* Validación síncrona y asíncrona
-  * Puede validar en tiempo real o contra APIs externas.
-  * Métodos: `.validate()` (lanza excepción si falla), `.isValid()` (booleano).
-* Integración con otras librerías
-  * Se usa muchísimo junto a Formik: defines el validationSchema con Yup y Formik se encarga de aplicarlo automáticamente.
-  * También se puede usar en Node.js o backend para validar datos de entrada.
-* Transformaciones de datos
-  * Puede sanitizar entradas (ejemplo: `trim()` en strings).
-  * Define valores por defecto con `.default()`.
+Ejemplo con marcadores avanzados (lab):
 
-### Uso de APIs remotas
+```js
+const { AdvancedMarkerElement } = google.maps.marker;
+new AdvancedMarkerElement({
+  map,
+  position: { lat, lng },
+  content: document.createElement("div") // puedes insertar HTML aquí
+});
+```
 
-En los laboratorios anteriores utilizamos la API de Open-Meteo para consultar información climática en distintas ubicaciones geográficas. En esta etapa ampliaremos nuestra aplicación incorporando el uso de las siguientes APIs:
+**InfoWindows**
 
-* API de geolocalización de W3C: se trata de la API estándar de geolocalización disponible en los navegadores web. Permite obtener la ubicación del usuario y solo puede emplearse en conexiones seguras (HTTPS) o, para fines de desarrollo, en localhost sin cifrado. Revisaremos sus detalles en la clase 5.
-* Google Maps Platform: la utilizaremos para realizar reverse geocoding, es decir, obtener la dirección del usuario a partir de sus coordenadas de GPS. También profundizaremos en esta API en la clase 5.
-* API de horóscopo: haremos uso de una API pública disponible en [https://horoscope-app-api.vercel.app/](https://horoscope-app-api.vercel.app/) que nos entrega información de horóscopos.
-* API de traducción de Google: la emplearemos para traducir al español el horóscopo obtenido en inglés desde la API anterior.
+Un InfoWindow es una pequeña ventana emergente que aparece asociada a un marcador o a una posición en el mapa. Sirve para mostrar información contextual, como dirección, coordenadas, o botones de acción (por ejemplo, “Buscar hoteles cerca”).
 
-En ciertos escenarios es aceptable acceder directamente a las APIs desde el frontend en el navegador, por ejemplo, cuando se trata de APIs públicas gratuitas que ofrecen datos de solo lectura. Sin embargo, en el caso de APIs comerciales, o de aquellas que permiten modificar datos, el acceso debe manejarse con precaución: las claves (API keys) nunca deben exponerse en el código del frontend ni almacenarse en el repositorio.
+Ejemplo:
 
-La práctica recomendada en estos casos es encapsular las llamadas a APIs protegidas en un backend. En el presente laboratorio, el backend se encuentra en `server/index.js`. Se trata una pequeña aplicación web implementada con el microframework [Express](https://expressjs.com/) para Node (equivalente en funcionalidad a Rails en modo API, o a otros frameworks como Sinatra, FastAPI, o Flask). El backend puede mantener las claves bajo resguardo y ofrecer al frontend una fachada con endpoints propios, de modo que el cliente interactúe únicamente con el backend y nunca tenga acceso directo a las keys. **En el proyecto del curso, cuando tengan que trabajar con APIs remotas, tienen que implementar el mismo enfoque; añadir controladores y rutas a su aplicación Rails que hagan reenvío de las peticiones del frontend a las APIs remotas (de Google u otros proveedores), manteniendo las credenciales (API keys) resguardadas y sin exponerlas al frontend.**
+```js
+const infoWindow = new google.maps.InfoWindow({
+  content: "<strong>Dirección:</strong> Av. ... 123"
+});
+infoWindow.open({
+  anchor: marker,
+  map
+});
+```
 
-Para que el backend disponga de las claves (API keys) de forma segura, es habitual almacenarlas como [variables de entorno](https://chatgpt.com/share/68b70ce0-5278-800b-b99f-d95e99a31e43). Estas se definen en un archivo `.env` dentro del proyecto, que luego es cargado por el servidor al momento de iniciar. Reiteramos lo mencionado arriba: no es recomendable ni seguro mantener el archivo `.env` con las API keys en el repositorio junto con el resto del código. De hecho, los archivos `.env` se deben mantener en `.gitignore`. En cambio, sí es deseable mantener un archivo de ejemplo `.env.example`, que incluya solamente las variables de entorno sin los valores, a fin de que pueda saberse qué variables de entorno son requeridas por la aplicación. Es el caso en esta aplicación; se incluye un archivo `.env.example`, del cual se puede crear una copia `.env` y llenarla con las API keys necesarias.
+En el laboratorio, se crea un InfoWindow dinámicamente cuando haces click en el mapa: allí se despliega la dirección obtenida por reverse geocoding y botones que disparan llamadas a la Places API.
 
-Finalmente, es una buena práctica crear módulos en el frontend que encapsulen la funcionalidad de clientes de las APIs. En la presente aplicación estos clientes se encuentran en `src/api` y los hay para la API de geocoder de Google (`geocodeClient.js`), API de horóscopo (`horoscopeClient.js`), API de traducción (`translateClient.js`) y API de clima (`weatherApi.jsp`). Estos módulos luego pueden ser incluidos y utilizados desde componentes de React.
+**Eventos**
+
+Tanto el mapa como los markers pueden disparar eventos: `click`, `mouseover`, `drag`, etc.
+Esto hace posible construir interacciones ricas. Ejemplo:
+
+```js
+map.addListener("click", (e) => {
+  console.log("Clicked at", e.latLng.toJSON());
+});
+```
+
+**Control de estilo: Map IDs**
+
+Google ahora recomienda usar un Map ID, que es un estilo de mapa configurado en la consola de Cloud. Con él puedes definir si el mapa se ve en tonos claros, oscuros, minimalistas, etc., y reutilizar ese mismo ID en todas tus instancias del mapa.
+
+### API de Geocodificación
+
+La Geocoding API es un servicio de Google que traduce entre coordenadas geográficas (latitud/longitud) y direcciones legibles por humanos.
+
+Es una API HTTP REST, no tiene interfaz visual propia (a diferencia de Maps JavaScript). Normalmente se usa desde el backend para evitar exponer la clave, controlar cuotas y manejar CORS.
+
+¿Qué significa “geocoding”?
+
+Forward geocoding: de una dirección en texto → obtener coordenadas.
+Ejemplo: `"Av. Libertador Bernardo O'Higgins 1234, Santiago"` → `lat: -33.45, lng: -70.66`
+
+Reverse geocoding: de unas coordenadas → obtener una dirección legible.
+Ejemplo: `lat: -33.45, lng: -70.66` → `"Av. Libertador Bernardo O'Higgins 1234, Santiago, Chile"`
+
+**Endpoints principales**
+
+La API expone un único endpoint con distintas query params:
+
+_Forward Geocoding_
+```js
+GET https://maps.googleapis.com/maps/api/geocode/json
+    ?address={texto_direccion}
+    &language={es|en|...}
+    &key=YOUR_API_KEY
+```
+
+_Reverse Geocoding_
+
+```js
+GET https://maps.googleapis.com/maps/api/geocode/json
+    ?latlng={lat},{lng}
+    &language={es|en|...}
+    &key=YOUR_API_KEY
+```
+
+**Opcionales comunes:**
+
+* `language`: fuerza el idioma de la dirección (ej. es para español).
+* `region`: sesgo de país (cl para Chile, us para Estados Unidos).
+* `result_type`: filtra por tipo de resultado (ej. solo street_address)
+
+Estructura de la respuesta: La respuesta es un JSON con metadatos y un arreglo de resultados.
+
+```json
+{
+  "results": [
+    {
+      "formatted_address": "Av. Libertador Bernardo O'Higgins 1234, Santiago, Región Metropolitana, Chile",
+      "place_id": "ChIJxxxxxx",
+      "geometry": {
+        "location": { "lat": -33.4489, "lng": -70.6693 },
+        "location_type": "ROOFTOP"
+      },
+      "address_components": [
+        {
+          "long_name": "1234",
+          "types": ["street_number"]
+        },
+        {
+          "long_name": "Av. Libertador Bernardo O'Higgins",
+          "types": ["route"]
+        },
+        {
+          "long_name": "Santiago",
+          "types": ["locality", "political"]
+        },
+        {
+          "short_name": "CL",
+          "types": ["country", "political"]
+        }
+      ],
+      "types": ["street_address"]
+    }
+  ],
+  "status": "OK"
+}
+```
+
+**Campos clave:**
+
+* `formatted_address`: dirección lista para mostrar al usuario.
+* `place_id`: identificador único y estable del lugar, reutilizable en otras APIs (ej. Places).
+* `geometry.location`: coordenadas precisas.
+* `geometry.location_type`: precisión (ej. `ROOFTOP`, `RANGE_INTERPOLATED`).
+* `address_components`: desglose jerárquico (calle, número, ciudad, región, país, código postal).
+* `types`: tipo de lugar devuelto (ej. `street_address`, `locality`).
+
+Usos típicos en aplicaciones
+
+* Mostrar la dirección de un punto en el mapa (reverse).
+* Calcular coordenadas de una dirección ingresada por un usuario (forward).
+* Guardar place_id para integraciones con Places API o Directions API.
+* Autocompletar formularios de direcciones (cuando se combina con Places Autocomplete).
+
+**Integración en el laboratorio**
+
+En este lab, no llamamos directamente a la Geocoding API desde el navegador, sino a través de un backend Express (ver `server/index.js`) que expone rutas `/api/geocode/reverse` y `/api/geocode/forward`.
+
+Esto tiene tres ventajas:
+
+1. No exponer la clave de servidor en el front.
+2. Manejar CORS (la API de Google no acepta cualquier origen).
+3. Normalizar la respuesta a un formato simplificado para la app React.
+
+Ejemplo desde el front (lab):
+
+```js
+const info = await reverseGeocodeServer(lat, lng, "es");
+console.log(info.formatted); // Dirección en texto
+```
+
+**Consideraciones de cuotas y facturación**
+
+* Geocoding API tiene un costo por cada request (después de un pequeño crédito mensual gratuito en GCP).
+* Cada request cuenta por resultado * devuelto, no solo por llamada.
+* El uso indebido (ej. llamar desde el front con clave visible) puede agotar rápidamente la cuota.
+
+### Google Places API: búsqueda de puntos de interés (POIs)
+
+La Places API permite acceder a la enorme base de datos de Google sobre lugares del mundo real: negocios, hoteles, restaurantes, parques, estaciones de transporte, etc.
+Se puede usar de dos formas principales:
+
+1. Desde el navegador (librería places de la Google Maps JavaScript API).
+2. Vía HTTP REST (Places API clásico o la nueva versión “Places API (New)”).
+
+**¿Qué es un “place” en Google?**
+
+Un _place_ es cualquier punto de interés que Google indexa y que cuenta con un `place_id` único. Un lugar puede tener:
+
+* Nombre (ej. “Hotel Plaza San Francisco”).
+* Dirección formateada.
+* Ubicación geográfica (lat, lng).
+* Categorías / tipos (ej. lodging, restaurant, bank).
+* Rating y cantidad de reseñas.
+* Horarios de apertura.
+* Fotos asociadas.
+* Datos de contacto (teléfono, sitio web).
+
+**Funcionalidades principales**
+
+La API ofrece distintos endpoints o métodos para obtener datos:
+
+1. Nearby Search
+
+Busca lugares cercanos a una coordenada, filtrando por tipo o keyword.
+Ejemplo: hoteles cerca de un marcador en el mapa.
+
+REST clásico (legacy):
+
+```js
+GET https://maps.googleapis.com/maps/api/place/nearbysearch/json
+    ?location=-33.4489,-70.6693
+    &radius=1000
+    &type=lodging
+    &key=YOUR_KEY
+```
+
+Places API (New):
+
+```js
+POST https://places.googleapis.com/v1/places:searchNearby
+Headers:
+  X-Goog-Api-Key: YOUR_KEY
+  X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.location,places.rating
+Body:
+{
+  "includedTypes": ["lodging"],
+  "maxResultCount": 10,
+  "locationRestriction": {
+    "circle": {
+      "center": { "latitude": -33.4489, "longitude": -70.6693 },
+      "radius": 1000.0
+    }
+  }
+}
+```
+
+Respuesta (simplificada):
+
+```json
+POST https://places.googleapis.com/v1/places:searchNearby
+Headers:
+  X-Goog-Api-Key: YOUR_KEY
+  X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.location,places.rating
+Body:
+{
+  "includedTypes": ["lodging"],
+  "maxResultCount": 10,
+  "locationRestriction": {
+    "circle": {
+      "center": { "latitude": -33.4489, "longitude": -70.6693 },
+      "radius": 1000.0
+    }
+  }
+}
+```
+
+2. Place Details
+
+Entrega información completa de un lugar específico, a partir de su `place_id`.
+
+REST (New):
+
+```
+GET https://places.googleapis.com/v1/places/{PLACE_ID}
+Headers:
+  X-Goog-Api-Key: YOUR_KEY
+  X-Goog-FieldMask: id,displayName,formattedAddress,location,websiteUri,internationalPhoneNumber,regularOpeningHours
+```
+
+Devuelve datos enriquecidos: teléfono, sitio web, fotos, horarios.
+
+3. Place Photos
+
+Permite obtener imágenes de un lugar. Se necesita un photo resource name obtenido de un Place Detail.
+
+Ejemplo:
+
+```
+GET https://places.googleapis.com/v1/{name=places/*/photos/*}/media
+    ?maxHeightPx=400
+    &key=YOUR_KEY
+```
+
+4. Autocomplete
+
+Sugiere posibles lugares mientras el usuario escribe en un input de búsqueda.
+
+```
+POST https://places.googleapis.com/v1/places:autocomplete
+Headers:
+  X-Goog-Api-Key: YOUR_KEY
+  X-Goog-FieldMask: suggestions.placePrediction.placeId,suggestions.placePrediction.text
+Body:
+{
+  "input": "Hotel Plaza",
+  "locationBias": {
+    "circle": {
+      "center": { "latitude": -33.45, "longitude": -70.66 },
+      "radius": 5000
+    }
+  }
+}
+```
+
+**Uso desde la Google Maps JavaScript API**
+
+Si cargas la librería places en `useJsApiLoader`, puedes crear un servicio directamente desde el objeto `map`:
+
+```js
+const service = new google.maps.places.PlacesService(map);
+
+service.nearbySearch(
+  {
+    location: { lat: -33.4489, lng: -70.6693 },
+    radius: 1000,
+    type: "lodging"
+  },
+  (results, status) => {
+    if (status === google.maps.places.PlacesServiceStatus.OK) {
+      results.forEach((place) => {
+        console.log(place.name, place.geometry.location.toJSON());
+      });
+    }
+  }
+);
+```
+
+Esto evita tener que hacer llamadas HTTP manuales, ya que el SDK maneja los requests y parsea la respuesta automáticamente.
+
+**Datos que devuelve un lugar**
+
+Campos más útiles:
+
+* `place_id` o `id` (identificador estable).
+* `displayName` / `name`.
+* `formattedAddress`.
+* `geometry.location` (`lat`/`lng`).
+* `types` (ej. `lodging`, `restaurant`).
+* `rating` y `user_ratings_total`.
+* `photos[]` (con `photo_reference`).
+* `opening_hours`.
+* `website` y `international_phone_number` (solo en Details).
+
+**Consideraciones de cuotas y facturación**
+
+* Cada request consume cuota (hay crédito gratuito mensual).
+* Las búsquedas amplias (`nearbySearch` con radius grande) consumen más rápido.
+* Usar field masks en la versión nueva permite pedir solo los campos necesarios y reducir costos.
+* Restringe la API key por referrer (si se usa en front) o por IP (si se usa en backend).
+
+**Integración en el laboratorio**
+
+En este lab:
+
+* Cuando haces click en el mapa, se abre un `InfoWindow` con la dirección (obtenida de Geocoding).
+* Dentro del `InfoWindow` hay un botón “Buscar hoteles cerca”.
+* Ese botón activa una llamada a Places Nearby Search (con `type=lodging`) para listar hoteles en un radio de 1 km.
+* Los resultados se muestran en el mapa como markers adicionales.
 
 ## Descripción de la Aplicación React
 
 Nuestra aplicación React en su tercera iteración ha crecido en funcionalidad. Permite crear un perfil de usuario (formulario con validaciones), iuncluyendo la funcionalidad básica de georeferenciación para buscar la dirección actual del usuario. Además, en la solución (rama `solution`) podrás ver la implementación de un componente de horóscopo.
 
+### ¿Dónde se usan las APIs de Google en este laboratorio?
+
+* `src/components/SearchMap.jsx`
+Carga Maps JS con libraries: ["places","marker"], configura `mapId`, maneja el click en el mapa y llama a:
+* `reverseGeocodeServer(lat, lng, 'es')` → `/api/geocode/reverse`.
+* Luego muestra el InfoWindow con dirección + botón “Buscar hoteles cerca”.
+* src/components/MapView.jsx
+Dibuja mapa y marcadores (incluye `AdvancedMarkerElement`). Integra la capa de Places para desplegar hoteles cercanos (tipo lodging) y limpiar resultados.
+* `src/api/geocodeClient.js`
+Pequeño cliente de front para pegarle a nuestro backend (`/api/geocode/reverse`, `/api/geocode/forward`).
+* `server/index.js`
+Implementa los endpoints `/api/geocode/*` (y `/api/translate`, /`api/horoscope` del ejemplo). Usa `node-fetch` + `dotenv`.
+
 ## Componentes de la Aplicación
 
-La página index, y los componentes `App`, `Home`, `Weather`, `Search` y `SearchResult` se mantienen sin cambio en comparación al laboratorio anterior. En esta oportunidad, las novedades son las siguientes:
+Los componentes relevantes de la aplicación en este laboratorio son los siguientes:
 
-* Componente `UserProfile` que implementa un perfil de usuario básico, con formulario Formik y validaciones con Yup. En la rama `solution` podrás ver el formulario más completo con un campo de fecha de nacimiento en vez de un campo de texto para ingresar la edad. Además, la edad en la rama `solution` se mantiene, pero se actualiza cada vez que cambia la fecha de nacimiento.
-* Se ha incorporado un cliente de API de Google Maps (`src/api/geocodeClient.js`) que permite usar el servicio de geocoder de Google. Esto es utilizado por el componente `UserProfile`, a fin de poder determinar la dirección del usuario e incorporarla en su perfil. Además, `UserProfile` utiliza la api de georeferenciación estándar para obtener las coordenadas del usuario.
-* Componente `Horoscope` que implementa una vista de horóscopo en función del signo que tenga el usuario, dado por su fecha de nacimiento. El horóscopo es obtenido desde la API pública antes mencionada, y traducido a español utilizando la API de traducción de Google. Este componente utiliza dos clientes de API, `src/api/horoscopeClient.js` y `src/api/translateClient.js`.
-* Servidor de backend para encapsular llamadas a las APIs de geolocalización (geocoder) y traducción de Google, junto con la API de horóscopo. En `server/index.js` verás el servidor de backend implementado con Express, el cual contiene endpoints que encapsulan las llamadas a la API de traducción de Google y a la API de horóscopo. Podrás ver en el servidor cómo éste carga las API keys desde el archivo `.env` con variables de entorno. 
-* El archivo `package.json` en la raíz del proyecto ha sido actualizado con scripts `dev:api`, el cual lanza el servidor de backend (puerto 5174), `dev:web`, el cual lanza el frontend (puerto 5173), y `dev` que lanza ambas aplicaciones en forma concurrente - usa un módulo llamado `concurrent` para lograr esto.
-* En el archivo `vite.config.js` se define una configuración para mapear todas las rutas `/api` en el frontend al backend.
+* **Componente `Search`** (`src/components/Search.jsx`) que actúa como contenedor principal de la funcionalidad de búsqueda. Integra tres subcomponentes:  
+  - `SearchText` para ingresar direcciones o términos de búsqueda en texto.  
+  - `SearchMap` para seleccionar ubicaciones directamente en el mapa y obtener direcciones mediante geocoding.  
+  - `SearchResultsList` para mostrar los resultados obtenidos de la búsqueda (por ejemplo, hoteles cercanos).  
+  `Search` coordina el estado compartido entre estos subcomponentes y conecta la lógica de favoritos.
 
-## Experimenta con el código
+* **Componente `SearchText`** (`src/components/SearchText.jsx`) que implementa el campo de texto para búsqueda de direcciones. Permite al usuario ingresar manualmente una dirección, que luego se resuelve a coordenadas a través del cliente `geocodeClient`. Al encontrar la dirección, se actualiza el mapa y la lista de resultados.
 
-1. Trabaja en la rama `main` completando el componente `UserProfile` con un campo que permita registrar la fecha de nacimiento. El usuario debe ser mayor de 13 años de edad (de lo contrario se debe desplegar error). Mantén la edad del usuario (`age`) sincronizada con su fecha de nacimiento. Muestra la fecha junto con la edad en la vista de `UserProfile`. Revisa la rama `solution` para ver el resultado deseado.
-2. Implementa el componente `Horoscope` utilizando el cliente de API de horóscopo en `src/api/horoscopeClient.js`, y el cliente de la API de traducción de Google, `src/api/translateClient.js`. También encontrarás la implementación completa de esto en la rama `solution`.
+* **Componente `SearchMap`** (`src/components/SearchMap.jsx`) que implementa la vista del mapa de Google con soporte para clicks. Usa `@react-google-maps/api` con las librerías `places` y `marker`. Al hacer click sobre el mapa, llama a `reverseGeocodeServer` para obtener la dirección asociada y despliega un `InfoWindow` con opciones, incluyendo el botón **“Buscar hoteles cerca”**, que invoca la Places API para listar alojamientos en la zona.
+
+* **Componente `SearchResultsList`** (`src/components/SearchResultsList.jsx`) que muestra en forma de lista los resultados obtenidos desde la búsqueda de lugares (ej. hoteles). Cada ítem de la lista puede incluir datos como nombre, dirección y rating, y se sincroniza con los marcadores desplegados en el mapa.
+
+* **Componente `MapView`** (`src/components/MapView.jsx`) que encapsula el renderizado del mapa y la lógica de markers. Recibe como props la información de los resultados de búsqueda y se encarga de dibujarlos con `AdvancedMarkerElement`. Además, gestiona `InfoWindows` cuando se selecciona un lugar en el mapa.
+
+* **Cliente de API de geocoding** (`src/api/geocodeClient.js`) que provee funciones para `/api/geocode/reverse` y `/api/geocode/forward`. Permite obtener coordenadas desde direcciones y viceversa. Es usado tanto en `SearchText` como en `SearchMap`.
+
+* **Servidor de backend** (`server/index.js`) implementado en Express. Expone endpoints que encapsulan las llamadas a servicios externos:  
+  - `/api/geocode/reverse` y `/api/geocode/forward` (Google Geocoding).  
+  - `/api/translate` (Google Translate).  
+  - `/api/horoscope` (API pública de horóscopo).  
+  El backend lee claves desde `.env` con `dotenv`.
+
+* **Archivo `package.json`** con scripts convenientes para desarrollo:  
+  - `dev:web`: levanta el frontend en `:5173`.  
+  - `dev:api`: levanta el backend en `:5174`.  
+  - `dev`: levanta ambos con `concurrently`.
+
+* **Archivo `vite.config.js`** con la configuración de proxy: redirige todas las llamadas a `/api` desde el frontend hacia el backend en el puerto 5174, evitando problemas de CORS en desarrollo.
+
+## Estudia el código
+
+1. Estudia cómo están implementados los favoritos; cómo se crean, cómo se guardan, y cómo se despliegan múltiples placemarks en el mapa de búsqueda, mostrando todos los favoritos.
+2. Estudia cómo está implementada la funcionalidad de búsqueda de hoteles que aparece en el InfoWindow de `MapView`.
+3. El mapa permite pinchar en cualquier punto, y muestra información de la ciudad más cercana. Estudia cómo se implementa esto, especialmente, `snapToNearestLocality` en el componente `SearchMap`.
 
 ## Anexo: Lo básico de Vite
 
