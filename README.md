@@ -407,7 +407,7 @@ En este lab:
 
 ## Descripción de la Aplicación React
 
-Nuestra aplicación React en su tercera iteración ha crecido en funcionalidad. Permite crear un perfil de usuario (formulario con validaciones), iuncluyendo la funcionalidad básica de georeferenciación para buscar la dirección actual del usuario. Además, en la solución (rama `solution`) podrás ver la implementación de un componente de horóscopo.
+Nuestra aplicación React en su cuarta iteración ha crecido en funcionalidad de mapas y georeferenciación. Permite realizar búsquedas de lugares usando un mapa, mantener en el mapa las ubicaciones favoritas, y buscar hoteles cercanos a ubicaciones.
 
 ### ¿Dónde se usan las APIs de Google en este laboratorio?
 
