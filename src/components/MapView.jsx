@@ -5,7 +5,8 @@ import { Box, Typography, CircularProgress } from "@mui/material";
 
 export default function MapView({
   center,
-  marker,
+  marker,               // { position }
+  favoritePins = [],    // [{ id, name, lat, lng }]
   loading,
   onMapLoad,
   onMapUnmount,
@@ -22,9 +23,68 @@ export default function MapView({
     []
   );
 
+  // ----- Marker de selección actual (uno)
   const advancedMarkerRef = useRef(null);
   const infoWindowRef = useRef(null);
 
+  // ----- Colección de marcadores favoritos
+  const favMarkersRef = useRef(new Map()); // id -> AdvancedMarkerElement
+
+  useEffect(() => {
+    if (!window.google?.maps?.marker) return;
+    const { AdvancedMarkerElement } = window.google.maps.marker;
+
+    // Crear/actualizar favoritos
+    const existing = favMarkersRef.current;
+
+    // Crea/actualiza
+    for (const f of favoritePins) {
+      if (!f?.lat || !f?.lng) continue; // solo pines con coords
+      const id = f.id ?? `${f.name}-${f.lat}-${f.lng}`;
+      let inst = existing.get(id);
+      if (!inst) {
+        inst = new AdvancedMarkerElement({
+          position: { lat: Number(f.lat), lng: Number(f.lng) },
+          map: window.__activeMapInstance || null,
+          title: f.name, // tooltip nativo
+        });
+        // Click: abre InfoWindow con nombre + coords
+        inst.addListener("click", () => {
+          if (!infoWindowRef.current)
+            infoWindowRef.current = new window.google.maps.InfoWindow();
+          infoWindowRef.current.setContent(
+            `<div style="max-width:240px">
+               <strong>${escapeHtml(f.name || 'Favorito')}</strong>
+               <div>${Number(f.lat).toFixed(6)}, ${Number(f.lng).toFixed(6)}</div>
+             </div>`
+          );
+          infoWindowRef.current.open({ anchor: inst });
+        });
+        existing.set(id, inst);
+      } else {
+        // actualizar posición por si cambió
+        inst.position = { lat: Number(f.lat), lng: Number(f.lng) };
+        if (inst.map == null && window.__activeMapInstance) {
+          inst.map = window.__activeMapInstance;
+        }
+      }
+    }
+
+    // Eliminar los que ya no están
+    for (const [id, inst] of existing.entries()) {
+      const still = favoritePins.some(f => (f.id ?? `${f.name}-${f.lat}-${f.lng}`) === id);
+      if (!still) {
+        inst.map = null;
+        existing.delete(id);
+      }
+    }
+  }, [favoritePins]);
+
+  // Helper simple para escapar HTML en strings
+  const escapeHtml = (s) =>
+    String(s).replace(/[&<>"']/g, (m) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m]));
+
+  // Marker “actual” (como lo tenías)
   useEffect(() => {
     if (!window.google?.maps?.marker || !marker?.position) return;
     const { AdvancedMarkerElement } = window.google.maps.marker;
@@ -41,12 +101,8 @@ export default function MapView({
 
         infoWindowRef.current.setContent(
           `<div style="max-width:260px">
-             <strong>Dirección</strong><div style="margin-bottom:6px">${
-               resolvedAddress || ""
-             }</div>
-             <strong>Coordenadas</strong><div>${
-               marker.position.lat.toFixed(6)
-             }, ${marker.position.lng.toFixed(6)}</div>
+             <strong>Dirección</strong><div style="margin-bottom:6px">${escapeHtml(resolvedAddress || "")}</div>
+             <strong>Coordenadas</strong><div>${marker.position.lat.toFixed(6)}, ${marker.position.lng.toFixed(6)}</div>
            </div>`
         );
         infoWindowRef.current.open({ anchor: advancedMarkerRef.current });
@@ -66,14 +122,21 @@ export default function MapView({
         onLoad={(m) => {
           onMapLoad(m);
           window.__activeMapInstance = m;
-          if (advancedMarkerRef.current) {
+
+          if (advancedMarkerRef.current)
             advancedMarkerRef.current.map = m;
+
+          // Monta los favoritos ya creados
+          for (const inst of favMarkersRef.current.values()) {
+            inst.map = m;
           }
         }}
         onUnmount={() => {
           onMapUnmount();
-          if (advancedMarkerRef.current) {
+          if (advancedMarkerRef.current)
             advancedMarkerRef.current.map = null;
+          for (const inst of favMarkersRef.current.values()) {
+            inst.map = null;
           }
           window.__activeMapInstance = null;
         }}

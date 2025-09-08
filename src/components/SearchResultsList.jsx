@@ -3,9 +3,16 @@ import { Box, Typography, Alert, LinearProgress } from '@mui/material';
 import { useSearchResults } from '../state/searchResultsContext.jsx';
 import SearchResult from './SearchResult';
 
-export default function SearchResultsList({ isFavorite, onAddFavorite }) {
+export default function SearchResultsList({ isFavorite, onAddFavorite, onRemoveFavoriteByName }) {
   const { state } = useSearchResults();
   const { results, loading, error } = state;
+
+  const handleAddFavorite = (label, location) => {
+    onAddFavorite?.(label, {
+      lat: Number(location.latitude),
+      lng: Number(location.longitude),
+    });
+  };
 
   return (
     <>
@@ -37,6 +44,7 @@ export default function SearchResultsList({ isFavorite, onAddFavorite }) {
               temps={temps}
               isFavorite={isFavorite}
               onAddFavorite={onAddFavorite}
+              onRemoveFavoriteByName={onRemoveFavoriteByName}
             />
           );
         })}

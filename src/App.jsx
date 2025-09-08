@@ -12,6 +12,7 @@ import PersonIcon from '@mui/icons-material/Person';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
+import { nanoid } from 'nanoid';
 
 import Home from './components/Home';
 import Search from './components/Search';
@@ -19,21 +20,36 @@ import UserProfile from './components/UserProfile';
 import Horoscope from './components/Horoscope';
 
 function App() {
-  // Favorites persisted
+  // state
   const [favorites, setFavorites] = useLocalStorageState('WeatherApp/Favorites', {
-    defaultValue: ['Santiago de Chile'],
+    defaultValue: [], // [{ id, name, lat, lng }]
   });
 
-  const isFavorite = (name) => favorites.includes(name);
+  // helpers
+  const isFavorite = (name) =>
+    favorites.some((f) => f.name.toLowerCase() === name.toLowerCase());
 
-  const onAddFavorite = (name) => {
+  const onAddFavorite = (name, coords) => {
     if (!name) return;
-    if (!favorites.includes(name)) setFavorites([...favorites, name]);
+    if (isFavorite(name)) return;
+    setFavorites((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(), // o nanoid()
+        name,
+        lat: coords?.lat ?? null,
+        lng: coords?.lng ?? null,
+      },
+    ]);
   };
 
-  const removeFavorite = (name) => {
-    setFavorites(favorites.filter((c) => c !== name));
+  const removeFavorite = (id) => {
+    setFavorites((prev) => prev.filter((f) => f.id !== id));
   };
+
+  const removeFavoriteByName = (name) => {
+    setFavorites(prev => prev.filter(f => f.name !== name));
+  };  
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -145,7 +161,17 @@ function App() {
       <Container component="main" maxWidth="md" sx={{ px: 2, py: 2 }}>
         <Routes>
           <Route path="/" element={<Home favorites={favorites} removeFavorite={removeFavorite} />} />
-          <Route path="/search" element={<Search isFavorite={isFavorite} onAddFavorite={onAddFavorite} />} />
+          <Route
+            path="/search"
+            element={
+              <Search
+                isFavorite={isFavorite}
+                onAddFavorite={onAddFavorite}
+                onRemoveFavoriteByName={removeFavoriteByName}
+                favorites={favorites}
+              />
+            }
+          />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/horoscope" element={<Horoscope profileTo="/profile" />} />
         </Routes>

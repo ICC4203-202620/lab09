@@ -5,16 +5,21 @@ import FavoriteIcon from '@mui/icons-material/Favorite';
 
 const fmt = (v) => (v == null ? '—' : `${v} °C`);
 
-const SearchResult = ({ label, temps, isFavorite, onAddFavorite }) => {
+const SearchResult = ({ label, location, temps, isFavorite, onAddFavorite, onRemoveFavoriteByName }) => {
   if (!temps) return null;
 
-  // Igual que en Weather.jsx: pronóstico si hay; si no, observado
   const maxToday = (temps.tempMaxForecast ?? temps.tempMaxObserved);
   const minToday = (temps.tempMinForecast ?? temps.tempMinObserved);
 
-  const fav = isFavorite?.(label);
-  const handleFav = () => {
-    if (!fav) onAddFavorite?.(label);
+  const fav = Boolean(isFavorite?.(label));
+  const handleToggle = () => {
+    if (fav) {
+      onRemoveFavoriteByName?.(label);
+    } else {
+      const lat = Number(location?.latitude ?? NaN);
+      const lng = Number(location?.longitude ?? NaN);
+      onAddFavorite?.(label, isFinite(lat) && isFinite(lng) ? { lat, lng } : undefined);
+    }
   };
 
   return (
@@ -24,8 +29,8 @@ const SearchResult = ({ label, temps, isFavorite, onAddFavorite }) => {
           <Typography variant="h6" component="h3" gutterBottom>
             {label}
           </Typography>
-          <Tooltip title={fav ? 'En favoritos' : 'Agregar a favoritos'}>
-            <IconButton onClick={handleFav} aria-label="favorite" color={fav ? 'error' : 'default'}>
+          <Tooltip title={fav ? 'Quitar de favoritos' : 'Agregar a favoritos'}>
+            <IconButton onClick={handleToggle} aria-label="favorite" color={fav ? 'error' : 'default'}>
               {fav ? <FavoriteIcon /> : <FavoriteBorderIcon />}
             </IconButton>
           </Tooltip>

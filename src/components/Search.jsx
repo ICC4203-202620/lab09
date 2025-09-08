@@ -21,7 +21,7 @@ function TabPanel({ hidden, labelledBy, children }) {
   );
 }
 
-function Search({ isFavorite, onAddFavorite }) {
+function Search({ isFavorite, onAddFavorite, favorites, onRemoveFavoriteByName }) {
   const [mode, setMode] = useState('text');
   const [mapHasMounted, setMapHasMounted] = useState(false);
   useEffect(() => { if (mode === 'map' && !mapHasMounted) setMapHasMounted(true); }, [mode, mapHasMounted]);
@@ -58,14 +58,14 @@ function Search({ isFavorite, onAddFavorite }) {
 
       {/* ---- TEXTO (siempre montado) ---- */}
       <TabPanel hidden={mode !== 'text'} labelledBy="tab-text" id="panel-text" aria-labelledby="tab-text">
-        <SearchText />
+        <SearchText onAddFavorite={onAddFavorite} isFavorite={isFavorite} />
       </TabPanel>
 
       {/* ---- MAPA (monta al primer ingreso y queda montado) ---- */}
       <TabPanel hidden={mode !== 'map'} labelledBy="tab-map" id="panel-map" aria-labelledby="tab-map">
         {mapHasMounted && (
           <GeoProvider>
-            <SearchMap />
+            <SearchMap onAddFavorite={onAddFavorite} favoritePins={favorites} />
           </GeoProvider>
         )}
       </TabPanel>
@@ -74,6 +74,7 @@ function Search({ isFavorite, onAddFavorite }) {
       <SearchResultsList
         isFavorite={isFavorite}
         onAddFavorite={onAddFavorite}
+        onRemoveFavoriteByName={onRemoveFavoriteByName}
       />
     </SearchResultsProvider>
   );
@@ -82,6 +83,8 @@ function Search({ isFavorite, onAddFavorite }) {
 Search.propTypes = {
   isFavorite: PropTypes.func.isRequired,
   onAddFavorite: PropTypes.func.isRequired,
+  favorites: PropTypes.func.isRequired,
+  onRemoveFavoriteByName: PropTypes.func.isRequired,
 };
 
 export default Search;
