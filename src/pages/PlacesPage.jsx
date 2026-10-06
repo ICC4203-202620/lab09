@@ -51,9 +51,14 @@ export default function PlacesPage() {
     setFocus(position);
   };
 
+  // Ejercicio 5a. El evento de click de <Map> trae las coordenadas en
+  // `event.detail.latLng`, como literal { lat, lng } (o null si se tocó algo
+  // que no es el mapa). Sin conexión no se puede crear nada. Con un punto
+  // válido, llamar a `startDraft` con él.
+  // Documentación: https://visgl.github.io/react-google-maps/docs/api-reference/components/map#events
+  // eslint-disable-next-line no-unused-vars -- TODO: quitar al resolver el ejercicio 5
   const handleMapClick = (event) => {
-    if (placemarks.disconnected || !event.detail.latLng) return;
-    startDraft(event.detail.latLng);
+    /* TODO */
   };
 
   const handleLocate = () => {
@@ -143,9 +148,11 @@ export default function PlacesPage() {
             <AdvancedMarker
               position={draft}
               title="Nuevo lugar"
-              draggable
               zIndex={1000}
-              onDragEnd={(e) => e.latLng && setDraft({ lat: e.latLng.lat(), lng: e.latLng.lng() })}
+              /* Ejercicio 5b. Hacer el marcador arrastrable (`draggable`) y, en
+                 `onDragEnd`, actualizar `draft` con la posición final. El evento
+                 es un google.maps.MapMouseEvent: `e.latLng` es un LatLng con los
+                 métodos lat() y lng(), no un literal. */
             >
               <Pin
                 background={theme.palette.secondary.main}

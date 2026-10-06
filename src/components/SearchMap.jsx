@@ -1,3 +1,6 @@
+// TODO: esta línea silencia al linter mientras el archivo esté a medio
+// implementar. Bórrala al terminar el ejercicio 2.
+/* eslint-disable no-unused-vars */
 import { useMemo, useRef, useState } from 'react';
 import { AdvancedMarker, InfoWindow, Map, useAdvancedMarkerRef, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { Alert, Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
@@ -96,15 +99,20 @@ export default function SearchMap({ isFavorite, onAddFavorite }) {
     if (!places || !point) return;
     setHotels({ status: 'loading', items: [] });
     try {
-      const { places: found } = await places.Place.searchNearby({
-        fields: ['id', 'displayName', 'location', 'formattedAddress', 'rating', 'userRatingCount', 'googleMapsURI'],
-        locationRestriction: { center: point.position, radius: HOTELS_RADIUS_M },
-        includedTypes: ['lodging'],
-        maxResultCount: HOTELS_MAX_RESULTS,
-        rankPreference: places.SearchNearbyRankPreference.DISTANCE,
-        language: 'es',
-        region: 'cl',
-      });
+      // Ejercicio 2. Llamar a `places.Place.searchNearby(request)`, que
+      // devuelve una promesa de `{ places }`. La request necesita:
+      //   - fields: los campos que usa HotelMarkers: 'id', 'displayName',
+      //     'location', 'formattedAddress', 'rating', 'userRatingCount',
+      //     'googleMapsURI'. Es obligatorio, y define cuánto se paga.
+      //   - locationRestriction: un círculo { center, radius } alrededor de
+      //     point.position, con HOTELS_RADIUS_M.
+      //   - includedTypes: ['lodging'], y maxResultCount: HOTELS_MAX_RESULTS.
+      //   - rankPreference: places.SearchNearbyRankPreference.DISTANCE.
+      //   - language 'es' y region 'cl'.
+      // Documentación: https://developers.google.com/maps/documentation/javascript/nearby-search
+      //
+      // Con el resultado, dejar hotels en { status: 'success' | 'empty', items }.
+      const found = []; /* TODO */
       setHotels({ status: found.length ? 'success' : 'empty', items: found });
     } catch (error) {
       // Casi siempre es configuración: la key no tiene habilitada Places API

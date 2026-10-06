@@ -1,3 +1,6 @@
+// TODO: esta línea silencia al linter mientras el archivo esté a medio
+// implementar. Bórrala al terminar el ejercicio 1.
+/* eslint-disable no-unused-vars */
 // Del punto tocado a la ciudad más cercana, con el Geocoder de Maps JS.
 //
 // Un reverse geocoding de unas coordenadas devuelve varios resultados, del más
@@ -30,34 +33,28 @@ export const formatCoords = ({ lat, lng }) => `${lat.toFixed(5)}, ${lng.toFixed(
 // localidad cerca (en medio del mar, por ejemplo). `geocoder` es una instancia
 // de google.maps.Geocoder; `latLng`, un { lat, lng }.
 export async function snapToNearestLocality(geocoder, latLng) {
-  const { results } = await geocoder.geocode({ location: latLng });
-  if (!results?.length) return null;
-
-  const coarse = results.filter((r) => {
-    const types = r.types ?? [];
-    return !types.some((t) => BLOCKED.has(t)) && types.some((t) => ALLOWED.has(t));
-  });
-  if (!coarse.length) return null;
-
-  const best = [...coarse].sort((a, b) => rank(a) - rank(b))[0];
-
-  const components = best.address_components ?? [];
-  const get = (type) => components.find((c) => c.types.includes(type));
-  const city = get('locality')?.long_name ?? get('postal_town')?.long_name ?? null;
-  const admin1 = get('administrative_area_level_1')?.short_name ?? null;
-  const admin2 = get('administrative_area_level_2')?.long_name ?? null;
-  const country = get('country')?.short_name ?? '';
-
-  let label;
-  if (city) label = admin1 ? `${city}, ${admin1}, ${country}` : `${city}, ${country}`;
-  else if (admin1) label = `${admin1}, ${country}`;
-  else if (admin2) label = `${admin2}, ${country}`;
-  else label = best.formatted_address ?? formatCoords(latLng);
-
-  return {
-    // El centroide de la localidad, no el punto exacto que se tocó.
-    position: best.geometry?.location?.toJSON?.() ?? latLng,
-    label,
-    parts: { city, admin1, admin2, country },
-  };
+  // Ejercicio 1. Pasos:
+  //
+  // 1. Pedir el reverse geocoding: `geocoder.geocode({ location: latLng })`
+  //    devuelve una promesa de `{ results }`. Si no hay resultados, devolver null.
+  //    Documentación: https://developers.google.com/maps/documentation/javascript/geocoding
+  //
+  // 2. Quedarse con los resultados "gruesos": los que no tienen ningún tipo de
+  //    BLOCKED y tienen alguno de ALLOWED (cada resultado trae `types`). Si no
+  //    queda ninguno, devolver null.
+  //
+  // 3. Elegir el mejor con `rank` (menor es mejor).
+  //
+  // 4. Sacar de `best.address_components` la ciudad (`locality`, o
+  //    `postal_town`), la región (`administrative_area_level_1`, en
+  //    `short_name`), la provincia (`administrative_area_level_2`) y el país
+  //    (`country`, `short_name`), y armar `label` como "Ciudad, Región, CC"
+  //    (o "Región, CC", o "Provincia, CC", o `formatted_address` si no hay nada).
+  //
+  // 5. Devolver { position, label, parts: { city, admin1, admin2, country } },
+  //    donde position es `best.geometry.location.toJSON()`: el centroide de la
+  //    localidad, no el punto exacto que se tocó.
+  //
+  // `rank` y `formatCoords` ya están definidos arriba.
+  return null; /* TODO */
 }

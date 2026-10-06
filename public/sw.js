@@ -70,6 +70,7 @@ self.addEventListener('activate', (event) => {
 });
 
 // /api/placemarks/<id>/photo
+// eslint-disable-next-line no-unused-vars -- TODO: quitar al resolver el ejercicio 8
 const PHOTO_PATH = /^\/api\/placemarks\/[^/]+\/photo$/;
 
 const isGoogleFont = (url) =>
@@ -98,14 +99,13 @@ self.addEventListener('fetch', (event) => {
     (url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('gstatic.com')) && !isGoogleFont(url);
   if (isGoogleMaps) return;
 
-  // Las fotos de los lugares son la excepción dentro de /api/: su URL es
-  // estable y el backend las declara inmutables (Cache-Control: immutable),
-  // así que valen tanto como los archivos del bundle. Guardarlas permite ver
-  // los lugares, con sus fotos, sin conexión.
-  if (url.origin === self.location.origin && PHOTO_PATH.test(url.pathname)) {
-    event.respondWith(cacheFirst(request));
-    return;
-  }
+  // Ejercicio 8. Las fotos de los lugares son la excepción dentro de /api/:
+  // su URL es estable y el backend las declara inmutables (Cache-Control:
+  // immutable), así que valen tanto como los archivos del bundle. Si la ruta
+  // es de nuestro origen y cumple PHOTO_PATH, responder con cacheFirst y
+  // salir, antes de que la regla de abajo la deje pasar sin tocar. Con eso,
+  // los lugares se ven con sus fotos sin conexión.
+  /* TODO */
 
   // El resto de las rutas de nuestro backend (/api/...) queda fuera, por la
   // misma razón que Open-Meteo. Son de nuestro propio origen, y sin esta línea

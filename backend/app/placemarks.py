@@ -46,13 +46,16 @@ CONTENT_TYPE_ALIASES = {"image/jpg": "image/jpeg"}
 
 
 def sniff_image(head: bytes) -> tuple[str, str] | None:
-    """Devuelve (content_type, extensión) según los primeros bytes, o None."""
-    for magic, content_type, extension in SIGNATURES:
-        if head.startswith(magic):
-            if content_type == "image/webp" and head[8:12] != b"WEBP":
-                return None
-            return content_type, extension
-    return None
+    """Devuelve (content_type, extensión) según los primeros bytes, o None.
+
+    Ejercicio 7. Recorrer SIGNATURES y, si `head` empieza con la firma
+    (`bytes.startswith`), devolver su content_type y extensión. WebP tiene una
+    trampa: su firma "RIFF" es la de cualquier archivo RIFF (un .wav, un .avi),
+    y recién los bytes 8 a 12 dicen "WEBP"; si no dicen eso, no es una imagen.
+    Mientras devuelva None, toda foto se rechaza con 422, y tres pruebas de
+    tests/test_placemarks.py fallan: hazlas pasar.
+    """
+    return None  # TODO
 
 
 def to_dict(row: sqlite3.Row) -> dict:

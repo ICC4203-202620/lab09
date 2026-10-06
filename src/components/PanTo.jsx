@@ -9,9 +9,12 @@ import PropTypes from 'prop-types';
 export default function PanTo({ lat, lng, zoom }) {
   const map = useMap();
   useEffect(() => {
-    if (!map || lat == null || lng == null) return;
-    map.panTo({ lat, lng });
-    if (zoom != null && map.getZoom() < zoom) map.setZoom(zoom);
+    // Ejercicio 4. Si hay mapa y coordenadas, mover la cámara con
+    // `map.panTo({ lat, lng })`. Si se pidió un `zoom` y el actual
+    // (`map.getZoom()`) es menor, acercar con `map.setZoom(zoom)`.
+    // Documentación: https://visgl.github.io/react-google-maps/docs/api-reference/hooks/use-map
+    //                https://developers.google.com/maps/documentation/javascript/reference/map
+    /* TODO */
   }, [map, lat, lng, zoom]);
   return null;
 }

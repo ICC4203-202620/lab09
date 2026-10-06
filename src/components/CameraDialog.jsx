@@ -1,3 +1,6 @@
+// TODO: esta línea silencia al linter mientras el archivo esté a medio
+// implementar. Bórrala al terminar el ejercicio 6.
+/* eslint-disable no-unused-vars */
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, Tooltip,
@@ -33,7 +36,9 @@ const MESSAGES = {
 export default function CameraDialog({ onClose, onCapture }) {
   const videoRef = useRef(null);
   const [facingMode, setFacingMode] = useState('environment');
-  const [error, setError] = useState(null);
+  // TODO (ejercicio 6): el mensaje inicial desaparece al implementar el visor;
+  // vuelve a partir en null.
+  const [error, setError] = useState('Ejercicio 6: el visor todavía no pide la cámara.');
   const [ready, setReady] = useState(false);
 
   // Cambiar de cámara reinicia el visor: el efecto suelta el stream anterior
@@ -45,28 +50,25 @@ export default function CameraDialog({ onClose, onCapture }) {
   };
 
   useEffect(() => {
-    let stream;
-    let cancelled = false;
-
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false })
-      .then((result) => {
-        // El usuario pudo cerrar el diálogo mientras el permiso se pedía.
-        if (cancelled) {
-          result.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        stream = result;
-        videoRef.current.srcObject = stream;
-      })
-      .catch((err) => {
-        if (!cancelled) setError(MESSAGES[err.name] ?? `No se pudo abrir la cámara (${err.name}).`);
-      });
-
-    return () => {
-      cancelled = true;
-      stream?.getTracks().forEach((track) => track.stop());
-    };
+    // Ejercicio 6. Pedir la cámara y mostrarla en el <video>:
+    //
+    // 1. `navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false })`
+    //    devuelve una promesa de MediaStream. Al resolverse, asignarlo a
+    //    `videoRef.current.srcObject`. El <video> tiene autoPlay, y su evento
+    //    onLoadedMetadata ya pone `ready` en true.
+    //
+    // 2. Si la promesa falla, mostrar el mensaje de MESSAGES según `err.name`
+    //    (NotAllowedError, NotFoundError…), o uno genérico.
+    //
+    // 3. En la limpieza del efecto, detener cada pista del stream con
+    //    `stream.getTracks().forEach((track) => track.stop())`. Sin esto la luz
+    //    de la cámara sigue encendida después de cerrar el diálogo. Ojo con el
+    //    caso en que el usuario cierra el diálogo antes de que la promesa
+    //    resuelva: el stream llega cuando ya nadie lo quiere, y hay que
+    //    detenerlo igual (una bandera `cancelled` sirve).
+    //
+    // Documentación: https://developer.mozilla.org/docs/Web/API/MediaDevices/getUserMedia
+    /* TODO */
   }, [facingMode]);
 
   const capture = async () => {
