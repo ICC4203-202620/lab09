@@ -1,322 +1,212 @@
-import { useEffect, useRef, useState } from "react";
-import { Box, Stack, Typography, CircularProgress, Alert, Button, Paper } from "@mui/material";
-import { useJsApiLoader } from "@react-google-maps/api";
-import MapView from "./MapView.jsx";
-import { useGeo } from "../state/geoContext.jsx";
-import { useSearchResults } from "../state/searchResultsContext.jsx";
-import { reverseGeocodeServer } from "../api/geocodeClient.js";
-import { fetchWeatherMulti } from "../api/weatherApi";
+import { useMemo, useRef, useState } from 'react';
+import { AdvancedMarker, InfoWindow, Map, useAdvancedMarkerRef, useMapsLibrary } from '@vis.gl/react-google-maps';
+import { Alert, Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
+import HotelIcon from '@mui/icons-material/Hotel';
+import PropTypes from 'prop-types';
+import { MAP_ID, MAPS_API_KEY, SANTIAGO } from '../config';
+import { fetchWeatherMulti, NetworkError } from '../api/weatherApi';
+import { formatCoords, snapToNearestLocality } from '../geo/locality';
+import HotelMarkers from './HotelMarkers';
+import MissingMapsKey from './MissingMapsKey';
+import PanTo from './PanTo';
+import SearchResult from './SearchResult';
 
-const GOOGLE_MAPS_LIBRARIES = ["places", "marker"];
+// Radio de la búsqueda de hoteles, en metros. Places API (New) admite hasta
+// 50.000, y a lo más 20 resultados por consulta, sin paginación.
+const HOTELS_RADIUS_M = 1500;
+const HOTELS_MAX_RESULTS = 20;
 
-export default function SearchMap({ onAddFavorite, favoritePins }) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-  const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID;
-  const { state, actions } = useGeo();
-  const { actions: results } = useSearchResults();
-  const mapRef = useRef(null);
+const IDLE = { status: 'idle', items: [] };
 
-  // ---- NEW: throttle + cache
-  const geocodeCooldownRef = useRef(0);
-  const geocodeCacheRef = useRef(new Map()); // key: "lat,lng" (rounded) -> { position, label, resolved }
+// Buscar una ciudad tocando el mapa. Al tocar un punto:
+//
+//  1. El Geocoder de Maps JS (en el navegador, con la key del frontend) lo
+//     convierte en la localidad más cercana: "Valparaíso, Región de
+//     Valparaíso, CL". El marcador se mueve al centro de esa localidad.
+//  2. Con ese texto se consulta el clima a Open-Meteo, igual que en la
+//     búsqueda por texto, y los resultados aparecen abajo como tarjetas.
+//  3. Desde la InfoWindow del marcador se pueden buscar hoteles cercanos con
+//     Places API (New), que se dibujan como marcadores de otro color.
+export default function SearchMap({ isFavorite, onAddFavorite }) {
+  const geocoding = useMapsLibrary('geocoding');
+  const places = useMapsLibrary('places');
+  const geocoder = useMemo(() => geocoding && new geocoding.Geocoder(), [geocoding]);
 
-  // ---- NEW: hoteles (Places Nearby)
-  const [hotelPlaces, setHotelPlaces] = useState([]);
-  const [hotelNextPage, setHotelNextPage] = useState(null);
+  const [point, setPoint] = useState(null);   // { position, label } | null
+  const [weather, setWeather] = useState(IDLE);
+  const [hotels, setHotels] = useState(IDLE);
+  const [markerRef, marker] = useAdvancedMarkerRef();
+  const [infoOpen, setInfoOpen] = useState(false);
 
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: apiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-    mapIds: mapId ? [mapId] : undefined,
-    language: "es",
-    region: "CL",
-  });
+  // Si el usuario toca dos puntos seguidos, la respuesta del primero puede
+  // llegar después que la del segundo. Cada click toma un número, y una
+  // respuesta solo se aplica si su número sigue siendo el último.
+  const clickId = useRef(0);
 
-  if (loadError) return <Alert severity="error">Error cargando Google Maps</Alert>;
-  if (!apiKey) return <Alert severity="warning">Agrega VITE_GOOGLE_MAPS_API_KEY a tu .env</Alert>;
+  if (!MAPS_API_KEY) return <MissingMapsKey />;
 
-  if (!isLoaded) {
-    return (
-      <Stack alignItems="center" justifyContent="center" sx={{ height: "60vh" }}>
-        <CircularProgress />
-        <Typography sx={{ mt: 1 }} variant="body2">Cargando Google Maps…</Typography>
-      </Stack>
-    );
-  }
+  const handleClick = async (event) => {
+    const latLng = event.detail.latLng;
+    if (!latLng || !geocoder) return;
+    const id = ++clickId.current;
 
-  // Snap "coarse": fuerza ciudad/región/país; evita sublocalidades/calles.
-  // Retorna { position, label, parts } donde:
-  //   - label: "Ciudad, Región, CC"  (o "Región, CC", o "Provincia, CC")
-  //   - parts: { city, admin1, admin2, country }
-  //   - position: centroide del resultado elegido (locality>admin1>admin2)
-  const snapToNearestLocality = async (latLng) => {
-    const geocoder = new window.google.maps.Geocoder();
-
-    const ALLOWED = new Set([
-      "locality",                     // ciudad
-      "postal_town",                  // UK y algunos países
-      "administrative_area_level_1",  // región/estado
-      "administrative_area_level_2",  // provincia/condado
-    ]);
-
-    const BLOCKED = new Set([
-      "route", "street_address", "intersection", "premise", "subpremise",
-      "sublocality", "sublocality_level_1", "neighborhood",
-      "administrative_area_level_3", "administrative_area_level_4",
-      "colloquial_area", "ward", "park", "point_of_interest",
-    ]);
-
-    const { results } = await geocoder.geocode({ location: latLng });
-    if (!results?.length) return null;
-
-    const coarseResults = results.filter((r) => {
-      const types = r.types || [];
-      if (types.some((t) => BLOCKED.has(t))) return false;
-      return types.some((t) => ALLOWED.has(t));
-    });
-
-    const pool = coarseResults.length ? coarseResults : results;
-
-    const PRIORITY = ["locality", "postal_town", "administrative_area_level_1", "administrative_area_level_2"];
-    const scored = pool
-      .map((r) => ({
-        r,
-        score: (r.types || []).reduce((best, t) => {
-          const idx = PRIORITY.indexOf(t);
-          return idx === -1 ? best : Math.min(best, idx);
-        }, Infinity),
-      }))
-      .sort((a, b) => a.score - b.score);
-
-    const best = scored[0]?.r ?? results[0];
-
-    const comps = best.address_components || [];
-    const get = (type) => comps.find((c) => c.types.includes(type));
-    const city =
-      get("locality")?.long_name ||
-      get("postal_town")?.long_name ||
-      null;
-
-    const admin1 = get("administrative_area_level_1")?.short_name || null;
-    const admin2 = get("administrative_area_level_2")?.long_name || null;
-    const country = get("country")?.short_name || "";
-
-    let label;
-    if (city) {
-      label = admin1 ? `${city}, ${admin1}, ${country}` : `${city}, ${country}`;
-    } else if (admin1) {
-      label = `${admin1}, ${country}`;
-    } else if (admin2) {
-      label = `${admin2}, ${country}`;
-    } else {
-      label = `${best.formatted_address || `${latLng.lat.toFixed(5)}, ${latLng.lng.toFixed(5)}`}`;
-    }
-
-    const position = best.geometry?.location?.toJSON?.() || latLng;
-
-    return {
-      position,
-      label,
-      parts: { city, admin1, admin2, country },
-    };
-  };
-
-  const handleReverse = async (latLng) => {
-    if (!latLng) return;
-
-    const now = Date.now();
-    if (now - geocodeCooldownRef.current < 800) {
-      return;
-    }
-    geocodeCooldownRef.current = now;
-
-    const key = `${latLng.lat.toFixed(5)},${latLng.lng.toFixed(5)}`;
-    const cached = geocodeCacheRef.current.get(key);
-
-    actions.setBusy(true);
-    results.setLoading(true);
-    if (!cached) results.clear();
+    // Feedback inmediato: el marcador aparece donde se tocó, y el snap lo
+    // reubica después.
+    setPoint({ position: latLng, label: formatCoords(latLng) });
+    setInfoOpen(true);
+    setHotels(IDLE);
+    setWeather({ status: 'loading', items: [] });
 
     try {
-      let snapped = cached?.snapped;
-      let resolved = cached?.resolved;
+      const snapped = await snapToNearestLocality(geocoder, latLng);
+      if (id !== clickId.current) return;
 
       if (!snapped) {
-        snapped = await snapToNearestLocality(latLng); // { position, label, parts }
+        setWeather({ status: 'empty', items: [] });
+        return;
       }
+      setPoint({ position: snapped.position, label: snapped.label });
 
-      if (snapped?.position) {
-        actions.setMarker({ position: snapped.position });
-        actions.setCenter(snapped.position);
+      let items = await fetchWeatherMulti(snapped.label);
+      // Open-Meteo no conoce todas las localidades de Google. Segundo intento
+      // con la región, que casi siempre existe como ciudad del mismo nombre.
+      if (!items.length && snapped.parts.admin1 && snapped.parts.country) {
+        items = await fetchWeatherMulti(`${snapped.parts.admin1}, ${snapped.parts.country}`);
       }
-
-      if (!resolved) {
-        resolved = snapped?.label ?? '';
-      }
-      actions.setResolvedAddress(resolved);
-
-      const q1 = snapped?.label ?? `${latLng.lat}, ${latLng.lng}`;
-      let arr = await fetchWeatherMulti(q1);
-
-      if (!arr.length && snapped?.parts?.admin1 && snapped?.parts?.country) {
-        const q2 = `${snapped.parts.admin1}, ${snapped.parts.country}`;
-        arr = await fetchWeatherMulti(q2);
-      }
-
-      if (arr.length) {
-        results.setResults(arr);
-      } else {
-        results.setError('No se encontraron ubicaciones para estas coordenadas.');
-      }
-
-      geocodeCacheRef.current.set(key, { snapped, resolved });
-    } catch (e) {
-      results.setError(`No se pudo obtener localidad/dirección/clima: ${e.message}`);
-      actions.setError(`No se pudo obtener localidad/dirección: ${e.message}`);
-    } finally {
-      actions.setBusy(false);
+      if (id !== clickId.current) return;
+      setWeather(items.length ? { status: 'success', items } : { status: 'empty', items: [] });
+    } catch (error) {
+      if (id !== clickId.current) return;
+      setWeather({
+        status: 'error',
+        items: [],
+        message: error instanceof NetworkError
+          ? 'Sin conexión: no es posible consultar el clima de un punto nuevo.'
+          : 'No se pudo obtener la localidad o su clima.',
+      });
     }
   };
 
-  const handleMapClick = (e) => {
-    const pos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    // Feedback inmediato; el snap luego reubica
-    actions.setMarker({ position: pos });
-    actions.setCenter(pos);
-    handleReverse(pos);
-    // Al cambiar de punto, limpiamos hoteles previos para evitar confusión visual
-    clearHotels();
+  // Places API (New): Place.searchNearby devuelve una promesa y exige declarar
+  // en `fields` qué datos de cada lugar se quieren, porque se paga según esa
+  // lista. `PlacesService.nearbySearch`, el método que aparece en la mayoría
+  // de los tutoriales, es legacy desde marzo de 2025 y un proyecto nuevo de
+  // Google Cloud no puede habilitarlo.
+  const searchHotels = async () => {
+    if (!places || !point) return;
+    setHotels({ status: 'loading', items: [] });
+    try {
+      const { places: found } = await places.Place.searchNearby({
+        fields: ['id', 'displayName', 'location', 'formattedAddress', 'rating', 'userRatingCount', 'googleMapsURI'],
+        locationRestriction: { center: point.position, radius: HOTELS_RADIUS_M },
+        includedTypes: ['lodging'],
+        maxResultCount: HOTELS_MAX_RESULTS,
+        rankPreference: places.SearchNearbyRankPreference.DISTANCE,
+        language: 'es',
+        region: 'cl',
+      });
+      setHotels({ status: found.length ? 'success' : 'empty', items: found });
+    } catch (error) {
+      // Casi siempre es configuración: la key no tiene habilitada Places API
+      // (New), o el proyecto no tiene facturación activa.
+      console.error('[places] searchNearby:', error);
+      setHotels({ status: 'error', items: [], message: `No se pudo buscar hoteles: ${error.message}` });
+    }
   };
-
-  const handleMapLoad = (m) => {
-    mapRef.current = m;
-    actions.setLoading(false);
-  };
-  const handleMapUnmount = () => {
-    mapRef.current = null;
-    actions.setLoading(true);
-  };
-
-  // ==== NEW: Nearby Search (hoteles) ====
-
-  function clearHotels() {
-    setHotelPlaces([]);
-    setHotelNextPage(null);
-  }
-
-  function searchHotelsNear(lat, lng) {
-    if (!window.google || !mapRef.current) return;
-    const svc = new window.google.maps.places.PlacesService(mapRef.current);
-    const location = new window.google.maps.LatLng(lat, lng);
-
-    // Estrategia: rankBy DISTANCE para que sea claro “cerca de este punto”
-    const req = {
-      location,
-      rankBy: window.google.maps.places.RankBy.DISTANCE,
-      type: "lodging",
-      keyword: "hotel",
-    };
-
-    setHotelPlaces([]);
-    setHotelNextPage(null);
-
-    svc.nearbySearch(req, (results, status, pagination) => {
-      if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) return;
-      setHotelPlaces(results);
-      if (pagination && pagination.hasNextPage) {
-        setHotelNextPage(() => pagination.nextPage);
-      }
-    });
-  }
-
-  function loadMoreHotels() {
-    if (hotelNextPage) hotelNextPage();
-  }
 
   return (
-    <Box sx={{ position: 'relative' }}>
-      <MapView
-        center={state.center}
-        marker={state.marker}
-        favoritePins={favoritePins}
-        resolvedAddress={state.resolvedAddress}
-        loading={state.loading}
-        onMapLoad={handleMapLoad}
-        onMapUnmount={handleMapUnmount}
-        onClick={handleMapClick}
+    <Stack spacing={2} sx={{ m: 2, maxWidth: 900, mx: 'auto' }}>
+      <Typography color="text.secondary">
+        Toca un punto del mapa para ver el clima de la ciudad más cercana.
+      </Typography>
 
-        /* ==== NEW: props para hoteles/Places ==== */
-        hotels={hotelPlaces}
-        onSearchHotelsNear={(latLng) => searchHotelsNear(latLng.lat, latLng.lng)}
-        onClearHotels={clearHotels}
-      />
-
-      {/* Panel flotante con acciones/estado de hoteles */}
-      {hotelPlaces?.length > 0 && (
-        <Paper
-          elevation={2}
-          sx={{
-            position: 'absolute',
-            right: 12,
-            bottom: 12,
-            p: 1.25,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1
-          }}
+      <Box sx={{ position: 'relative', height: { xs: '55vh', md: 460 }, borderRadius: 2, overflow: 'hidden' }}>
+        {(weather.status === 'loading' || hotels.status === 'loading') && (
+          <LinearProgress sx={{ position: 'absolute', inset: '0 0 auto', zIndex: 1 }} />
+        )}
+        <Map
+          mapId={MAP_ID}
+          defaultCenter={SANTIAGO}
+          defaultZoom={11}
+          gestureHandling="greedy"
+          clickableIcons={false}
+          reuseMaps
+          onClick={handleClick}
         >
-          <Typography variant="body2">Hoteles: {hotelPlaces.length}</Typography>
-          {hotelNextPage && (
-            <Button size="small" variant="outlined" onClick={loadMoreHotels}>
-              Más resultados
-            </Button>
+          {point && (
+            <>
+              <AdvancedMarker
+                ref={markerRef}
+                position={point.position}
+                title={point.label}
+                zIndex={1000}
+                onClick={() => setInfoOpen((open) => !open)}
+              />
+              {infoOpen && (
+                <InfoWindow
+                  anchor={marker}
+                  headerContent={<Typography variant="subtitle2">{point.label}</Typography>}
+                  onCloseClick={() => setInfoOpen(false)}
+                >
+                  <Typography variant="body2" gutterBottom>{formatCoords(point.position)}</Typography>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<HotelIcon />}
+                    onClick={searchHotels}
+                    disabled={!places || hotels.status === 'loading'}
+                  >
+                    Buscar hoteles cerca
+                  </Button>
+                </InfoWindow>
+              )}
+              <PanTo lat={point.position.lat} lng={point.position.lng} />
+            </>
           )}
-          <Button size="small" variant="text" onClick={clearHotels}>
-            Limpiar
-          </Button>
-        </Paper>
+          <HotelMarkers hotels={hotels.items} />
+        </Map>
+      </Box>
+
+      <Typography role="status" aria-live="polite" variant="body2" color="text.secondary">
+        {weather.status === 'loading' && 'Buscando la localidad y su clima…'}
+        {weather.status === 'empty' && 'No se encontró una ciudad cerca de ese punto. Prueba con otro.'}
+        {hotels.status === 'loading' && ' Buscando hoteles…'}
+        {hotels.status === 'success' && ` ${hotels.items.length} alojamientos a menos de ${HOTELS_RADIUS_M / 1000} km, del más cercano al más lejano.`}
+        {hotels.status === 'empty' && ' No hay alojamientos cerca de este punto.'}
+      </Typography>
+      {weather.status === 'error' && <Alert severity="warning">{weather.message}</Alert>}
+      {hotels.status === 'error' && <Alert severity="error">{hotels.message}</Alert>}
+      {hotels.items.length > 0 && (
+        <Button size="small" onClick={() => setHotels(IDLE)} sx={{ alignSelf: 'flex-start' }}>
+          Quitar hoteles del mapa
+        </Button>
       )}
 
-      {state.marker?.position && (
-        <Paper
-          elevation={3}
-          sx={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            p: 1,
-            display: 'flex',
-            gap: 1,
-            alignItems: 'center',
-          }}
-        >
-          <Typography variant="body2" sx={{ mx: 1 }}>
-            {state.resolvedAddress || 'Ubicación seleccionada'}
-          </Typography>
-          <Button
-            size="small"
-            variant="contained"
-            onClick={async () => {
-              const { lat, lng } = state.marker.position;
-              try {
-                const snapped = await snapToNearestLocality({ lat, lng });
-                const name =
-                  snapped?.label ||
-                  state.resolvedAddress ||
-                  `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                onAddFavorite?.(name, { lat, lng });
-              } catch {
-                const fallback =
-                  state.resolvedAddress || `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-                onAddFavorite?.(fallback, { lat, lng });
-              }
-            }}
-          >
-            Agregar a favoritos
-          </Button>
-        </Paper>
-      )}
-    </Box>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+        }}
+      >
+        {weather.items.map(({ location, temps }) => {
+          const label = `${location.name}${location.admin1 ? `, ${location.admin1}` : ''}, ${location.country_code}`;
+          return (
+            <SearchResult
+              key={`${location.id}-${location.latitude}-${location.longitude}`}
+              label={label}
+              temps={temps}
+              isFavorite={isFavorite}
+              onAddFavorite={onAddFavorite}
+            />
+          );
+        })}
+      </Box>
+    </Stack>
   );
 }
+
+SearchMap.propTypes = {
+  isFavorite: PropTypes.func.isRequired,
+  onAddFavorite: PropTypes.func.isRequired,
+};

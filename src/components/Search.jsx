@@ -1,90 +1,48 @@
-import { useMemo, useState, useEffect } from 'react';
-import { Box, Tabs, Tab } from '@mui/material';
+import { useState } from 'react';
+import { Box, Tab, Tabs } from '@mui/material';
 import PropTypes from 'prop-types';
+import SearchText from './SearchText';
+import SearchMap from './SearchMap';
 
-import SearchText from './SearchText.jsx';
-import { GeoProvider } from '../state/geoContext.jsx';
-import SearchMap from './SearchMap.jsx';
-import { SearchResultsProvider } from '../state/searchResultsContext.jsx';
-import SearchResultsList from './SearchResultsList.jsx';
-
-function TabPanel({ hidden, labelledBy, children }) {
-  return (
-    <Box
-      role="tabpanel"
-      aria-labelledby={labelledBy}
-      hidden={hidden}
-      sx={{ display: hidden ? 'none' : 'block' }}
-    >
-      {children}
-    </Box>
-  );
-}
-
-function Search({ isFavorite, onAddFavorite, favorites, onRemoveFavoriteByName }) {
+// Dos maneras de buscar una ciudad: escribiendo su nombre (la de los
+// laboratorios anteriores, en SearchText) o tocando un punto del mapa
+// (SearchMap). Este componente solo reparte: las pestañas y nada más.
+function Search({ isFavorite, onAddFavorite }) {
   const [mode, setMode] = useState('text');
-  const [mapHasMounted, setMapHasMounted] = useState(false);
-  useEffect(() => { if (mode === 'map' && !mapHasMounted) setMapHasMounted(true); }, [mode, mapHasMounted]);
 
-  const tabs = useMemo(
-    () => [
-      { value: 'text', label: 'Buscar por texto', id: 'tab-text', panelId: 'panel-text' },
-      { value: 'map',  label: 'Elegir en mapa',  id: 'tab-map',  panelId: 'panel-map'  },
-    ],
-    []
-  );
+  // El mapa se monta la primera vez que el usuario entra a su pestaña y
+  // después queda montado, aunque oculto. Cada <Map> que se monta es una
+  // carga de mapa que Google cobra: mejor una sola por visita a la pantalla.
+  const [mapMounted, setMapMounted] = useState(false);
+
+  const handleChange = (_, value) => {
+    setMode(value);
+    if (value === 'map') setMapMounted(true);
+  };
 
   return (
-    <SearchResultsProvider>
-      {/* Header + Tabs */}
-      <Box sx={{ m: 2, maxWidth: 900, mx: 'auto', bgcolor: 'white' }}>
-        <Tabs
-          value={mode}
-          onChange={(_, v) => setMode(v)}
-          aria-label="Search modes"
-          sx={{ mb: 2 }}
-        >
-          {tabs.map(t => (
-            <Tab
-              key={t.value}
-              value={t.value}
-              label={t.label}
-              id={t.id}
-              aria-controls={t.panelId}
-            />
-          ))}
+    <>
+      <Box sx={{ m: 2, maxWidth: 900, mx: 'auto' }}>
+        <Tabs value={mode} onChange={handleChange} variant="fullWidth" aria-label="Modos de búsqueda">
+          <Tab value="text" label="Por texto" id="tab-text" aria-controls="panel-text" />
+          <Tab value="map" label="En el mapa" id="tab-map" aria-controls="panel-map" />
         </Tabs>
       </Box>
 
-      {/* ---- TEXTO (siempre montado) ---- */}
-      <TabPanel hidden={mode !== 'text'} labelledBy="tab-text" id="panel-text" aria-labelledby="tab-text">
-        <SearchText onAddFavorite={onAddFavorite} isFavorite={isFavorite} />
-      </TabPanel>
+      <Box role="tabpanel" id="panel-text" aria-labelledby="tab-text" hidden={mode !== 'text'}>
+        <SearchText isFavorite={isFavorite} onAddFavorite={onAddFavorite} />
+      </Box>
 
-      {/* ---- MAPA (monta al primer ingreso y queda montado) ---- */}
-      <TabPanel hidden={mode !== 'map'} labelledBy="tab-map" id="panel-map" aria-labelledby="tab-map">
-        {mapHasMounted && (
-          <GeoProvider>
-            <SearchMap onAddFavorite={onAddFavorite} favoritePins={favorites} />
-          </GeoProvider>
-        )}
-      </TabPanel>
-
-      {/* ---- LISTA DE RESULTADOS COMPARTIDA ---- */}
-      <SearchResultsList
-        isFavorite={isFavorite}
-        onAddFavorite={onAddFavorite}
-        onRemoveFavoriteByName={onRemoveFavoriteByName}
-      />
-    </SearchResultsProvider>
+      <Box role="tabpanel" id="panel-map" aria-labelledby="tab-map" hidden={mode !== 'map'}>
+        {mapMounted && <SearchMap isFavorite={isFavorite} onAddFavorite={onAddFavorite} />}
+      </Box>
+    </>
   );
 }
 
 Search.propTypes = {
   isFavorite: PropTypes.func.isRequired,
   onAddFavorite: PropTypes.func.isRequired,
-  favorites: PropTypes.func.isRequired,
-  onRemoveFavoriteByName: PropTypes.func.isRequired,
 };
 
 export default Search;

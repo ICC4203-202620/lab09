@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8.3,<9
+# Starlette usa httpx2 en TestClient desde 2026; con httpx a secas avisa que esta deprecado.
+httpx2>=2,<3

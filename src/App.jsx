@@ -1,182 +1,143 @@
-import { useMemo, useState } from 'react';
-import { Routes, Route, Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useMemo } from 'react';
+import { Routes, Route, Link, useLocation } from 'react-router';
+import { APIProvider } from '@vis.gl/react-google-maps';
 import useLocalStorageState from 'use-local-storage-state';
 import {
-  AppBar, Toolbar, Typography, Button, Container, IconButton, Drawer,
-  List, ListItemButton, ListItemIcon, ListItemText, Divider, Box
+  AppBar, Toolbar, Typography, Button, Container,
+  BottomNavigation, BottomNavigationAction, Paper, useMediaQuery,
 } from '@mui/material';
-import MenuIcon from '@mui/icons-material/Menu';
+import { useTheme } from '@mui/material/styles';
 import HomeIcon from '@mui/icons-material/Home';
 import SearchIcon from '@mui/icons-material/Search';
+import PlaceIcon from '@mui/icons-material/Place';
 import PersonIcon from '@mui/icons-material/Person';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import { useTheme } from '@mui/material/styles';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { nanoid } from 'nanoid';
-
 import Home from './components/Home';
 import Search from './components/Search';
+import PlacesPage from './pages/PlacesPage';
 import UserProfile from './components/UserProfile';
 import Horoscope from './components/Horoscope';
+import ConnectionStatus from './components/ConnectionStatus';
+import { MAPS_API_KEY } from './config';
+
+const TITLES = {
+  '/search': 'Buscar ciudad',
+  '/places': 'Mis lugares',
+  '/profile': 'Perfil',
+  '/horoscope': 'Horóscopo',
+};
+
+// Lo que sale de localStorage pudo escribirlo otra aplicación del mismo origen.
+// Todos los laboratorios corren en localhost:5173, y no todos guardan los
+// favoritos igual: algunas versiones guardan objetos { id, name, ... } en vez de
+// nombres. Se conservan los nombres válidos, sin duplicados, y el resto se
+// descarta; si algo no es un arreglo, se vuelve al valor por defecto.
+const DEFAULT_FAVORITES = ['Santiago de Chile'];
+
+function normalizeFavorites(value) {
+  if (!Array.isArray(value)) return DEFAULT_FAVORITES;
+  const names = value
+    .map((item) => (typeof item === 'string' ? item : item?.name))
+    .filter((name) => typeof name === 'string' && name.trim());
+  return [...new Set(names)];
+}
+
+// Las cinco secciones de la aplicación. La barra superior y la inferior se
+// construyen desde esta misma lista, para que no puedan quedar distintas.
+const SECTIONS = [
+  { to: '/', label: 'Inicio', icon: <HomeIcon /> },
+  { to: '/search', label: 'Buscar', icon: <SearchIcon /> },
+  { to: '/places', label: 'Lugares', icon: <PlaceIcon /> },
+  { to: '/profile', label: 'Perfil', icon: <PersonIcon /> },
+  { to: '/horoscope', label: 'Horóscopo', icon: <AutoAwesomeIcon /> },
+];
 
 function App() {
-  // state
-  const [favorites, setFavorites] = useLocalStorageState('WeatherApp/Favorites', {
-    defaultValue: [], // [{ id, name, lat, lng }]
+  // Favorites persisted
+  const [storedFavorites, setFavorites] = useLocalStorageState('WeatherApp/Favorites', {
+    defaultValue: DEFAULT_FAVORITES,
   });
+  // Las operaciones de abajo escriben siempre a partir de la lista ya
+  // normalizada, de modo que la primera modificación deja limpio lo guardado.
+  const favorites = useMemo(() => normalizeFavorites(storedFavorites), [storedFavorites]);
 
-  // helpers
-  const isFavorite = (name) =>
-    favorites.some((f) => f.name.toLowerCase() === name.toLowerCase());
+  const isFavorite = (name) => favorites.includes(name);
 
-  const onAddFavorite = (name, coords) => {
+  const onAddFavorite = (name) => {
     if (!name) return;
-    if (isFavorite(name)) return;
-    setFavorites((prev) => [
-      ...prev,
-      {
-        id: crypto.randomUUID(), // o nanoid()
-        name,
-        lat: coords?.lat ?? null,
-        lng: coords?.lng ?? null,
-      },
-    ]);
+    if (!favorites.includes(name)) setFavorites([...favorites, name]);
   };
 
-  const removeFavorite = (id) => {
-    setFavorites((prev) => prev.filter((f) => f.id !== id));
+  const removeFavorite = (name) => {
+    setFavorites(favorites.filter((c) => c !== name));
   };
-
-  const removeFavoriteByName = (name) => {
-    setFavorites(prev => prev.filter(f => f.name !== name));
-  };  
 
   const location = useLocation();
-  const navigate = useNavigate();
+  const title = useMemo(() => TITLES[location.pathname] ?? 'Clima', [location.pathname]);
+
+  // En un teléfono los cinco botones no caben en la barra superior. Por
+  // debajo del breakpoint `sm` (600 px) la navegación baja a una
+  // BottomNavigation, que además queda al alcance del pulgar.
   const theme = useTheme();
-  const isMdUp = useMediaQuery(theme.breakpoints.up('md'));
+  const compact = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const title = useMemo(() => {
-    switch (location.pathname) {
-      case '/search': return 'Buscar ciudad';
-      case '/profile': return 'Perfil';
-      case '/horoscope': return 'Horóscopo';
-      default: return 'Clima';
-    }
-  }, [location.pathname]);
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const toggleDrawer = (open) => () => setDrawerOpen(open);
-
-  const navItems = [
-    { to: '/', label: 'Inicio', icon: <HomeIcon /> },
-    { to: '/search', label: 'Buscar', icon: <SearchIcon /> },
-    { to: '/profile', label: 'Perfil', icon: <PersonIcon /> },
-    { to: '/horoscope', label: 'Horóscopo', icon: <AutoAwesomeIcon /> },
-  ];
-
-  const DrawerContent = (
-    <Box
-      role="presentation"
-      sx={{ width: 270 }}
-      onKeyDown={(e) => {
-        // Cerrar con ESC
-        if (e.key === 'Escape') setDrawerOpen(false);
-      }}
-    >
-      <Box sx={{ px: 2, py: 2 }}>
-        <Typography variant="h6">{title}</Typography>
-      </Box>
-      <Divider />
-      <List>
-        {navItems.map(({ to, label, icon }) => {
-          const selected = location.pathname === to;
-          return (
-            <ListItemButton
-              key={to}
-              component={NavLink}
-              to={to}
-              selected={selected}
-              onClick={() => setDrawerOpen(false)}
-            >
-              <ListItemIcon>{icon}</ListItemIcon>
-              <ListItemText primary={label} />
-            </ListItemButton>
-          );
-        })}
-      </List>
-    </Box>
-  );
-
-  return (
+  const content = (
     <>
       <AppBar position="fixed">
         <Toolbar>
-          {/* Botón menú para xs/sm */}
-          <IconButton
-            color="inherit"
-            edge="start"
-            onClick={toggleDrawer(true)}
-            sx={{ mr: 1, display: { xs: 'inline-flex', md: 'none' } }}
-            aria-label="Abrir menú"
-          >
-            <MenuIcon />
-          </IconButton>
-
-          <Typography variant="h6" sx={{ flexGrow: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>
             {title}
           </Typography>
-
-          {/* Botones visibles en md+ (opcional) */}
-          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
-            <Button color="inherit" component={Link} to="/" startIcon={<HomeIcon />}>
-              Inicio
+          {!compact && SECTIONS.map(({ to, label, icon }) => (
+            <Button key={to} color="inherit" component={Link} to={to} startIcon={icon}>
+              {label}
             </Button>
-            <Button color="inherit" component={Link} to="/search" startIcon={<SearchIcon />}>
-              Buscar
-            </Button>
-            <Button color="inherit" component={Link} to="/profile" startIcon={<PersonIcon />}>
-              Perfil
-            </Button>
-            <Button color="inherit" component={Link} to="/horoscope" startIcon={<AutoAwesomeIcon />}>
-              Horóscopo
-            </Button>
-          </Box>
+          ))}
         </Toolbar>
       </AppBar>
-
-      {/* Offset para que el contenido no quede bajo la AppBar */}
       <Toolbar />
-
-      {/* Drawer lateral */}
-      <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={toggleDrawer(false)}
-        ModalProps={{ keepMounted: true }} // mejor rendimiento en móviles
-      >
-        {DrawerContent}
-      </Drawer>
-
-      <Container component="main" maxWidth="md" sx={{ px: 2, py: 2 }}>
+      <ConnectionStatus />
+      {/* Con la barra inferior, el padding final evita que tape lo último de cada pantalla */}
+      <Container component="main" maxWidth="md" sx={{ pb: compact ? 9 : 0 }}>
         <Routes>
           <Route path="/" element={<Home favorites={favorites} removeFavorite={removeFavorite} />} />
-          <Route
-            path="/search"
-            element={
-              <Search
-                isFavorite={isFavorite}
-                onAddFavorite={onAddFavorite}
-                onRemoveFavoriteByName={removeFavoriteByName}
-                favorites={favorites}
-              />
-            }
-          />
+          <Route path="/search" element={<Search isFavorite={isFavorite} onAddFavorite={onAddFavorite} />} />
+          <Route path="/places" element={<PlacesPage />} />
           <Route path="/profile" element={<UserProfile />} />
           <Route path="/horoscope" element={<Horoscope profileTo="/profile" />} />
         </Routes>
       </Container>
+
+      {compact && (
+        <Paper
+          elevation={3}
+          sx={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: (t) => t.zIndex.appBar }}
+        >
+          <BottomNavigation showLabels value={location.pathname}>
+            {SECTIONS.map(({ to, label, icon }) => (
+              <BottomNavigationAction
+                key={to}
+                component={Link}
+                to={to}
+                value={to}
+                label={label}
+                icon={icon}
+              />
+            ))}
+          </BottomNavigation>
+        </Paper>
+      )}
     </>
+  );
+
+  // Un solo APIProvider para toda la aplicación: carga el script de Google
+  // Maps una vez, y cada <Map> de cada pantalla queda dentro de él. Sin key no
+  // se intenta cargar nada; las pantallas con mapa muestran un aviso.
+  if (!MAPS_API_KEY) return content;
+  return (
+    <APIProvider apiKey={MAPS_API_KEY} language="es" region="CL">
+      {content}
+    </APIProvider>
   );
 }
 
