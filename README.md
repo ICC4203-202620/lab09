@@ -83,7 +83,7 @@ uvicorn app.main:app --reload --env-file ../.env
 
 Si el puerto 8000 está ocupado por otro proyecto, levanta uvicorn con `--port 8010` y Vite con `API_TARGET=http://localhost:8010 yarn dev:web`.
 
-La documentación interactiva del backend queda en [http://localhost:8000/docs](http://localhost:8000/docs), generada por FastAPI a partir del código. Desde ahí puedes probar cada endpoint sin el frontend. Las pruebas del backend corren con `yarn test:api` y no necesitan keys ni red.
+La documentación interactiva del backend queda en [http://localhost:8000/docs](http://localhost:8000/docs), generada por FastAPI a partir del código. Desde ahí puedes probar cada endpoint sin el frontend. Las pruebas del backend corren con `yarn test:api` y no necesitan keys ni red. En la rama `main` tres de ellas fallan a propósito: las arregla el ejercicio 7.
 
 ## Marco teórico
 
@@ -214,6 +214,8 @@ Las novedades son las siguientes.
 
 La `InfoWindow` del marcador ofrece *Buscar hoteles cerca*, que llama a `Place.searchNearby` y entrega los resultados a `HotelMarkers`: un marcador por hotel, con un `Pin` del color secundario del tema, y una sola `InfoWindow`, la del seleccionado, con dirección, calificación y un enlace a Google Maps.
 
+En la rama `main` tres piezas de esta pestaña están sin implementar, con comentarios numerados que guían el trabajo: `snapToNearestLocality` devuelve `null` (ejercicio 1), `searchHotels` no llama a Places (ejercicio 2) y `HotelMarkers` no dibuja nada (ejercicio 3). Por eso, hasta resolverlos, tocar el mapa responde "No se encontró una ciudad cerca de ese punto".
+
 ### PlacesPage y los lugares
 
 `src/pages/PlacesPage.jsx` es la pantalla Lugares. El mapa muestra los lugares guardados con `PlacemarkMarkers` (un marcador por lugar, una `InfoWindow` con la foto, la dirección, la nota y el botón *Eliminar*). Tocar el mapa, o el botón *Usar mi ubicación*, deja un marcador borrador de otro color, arrastrable; *Guardar este lugar* abre `PlacemarkForm`, un diálogo con nombre, dirección (propuesta por el backend con reverse geocoding, y editable), nota y `CameraCapture`. Debajo del mapa, `PlacemarkList` muestra las tarjetas con sus fotos, con *Ver en el mapa* y *Eliminar*.
@@ -221,6 +223,8 @@ La `InfoWindow` del marcador ofrece *Buscar hoteles cerca*, que llama a `Place.s
 El estado vive en `usePlacemarks`, un hook con el modelo de `useWeather`: carga la lista del backend, la respalda en `localStorage` (`placemarksCache.js`) con la hora, y sin conexión muestra el respaldo con su fecha y deshabilita crear y eliminar. Expone `create` y `remove`, que llaman a `placemarksClient.js` y actualizan la lista sin volver a pedirla.
 
 `CameraCapture` ofrece los dos caminos para obtener la foto, y `CameraDialog` es el visor con `getUserMedia`. Los dos diálogos se montan solo mientras están abiertos, de modo que cada apertura parte con el estado inicial: es lo que evita reiniciar estado dentro de un efecto, cosa que la regla `react-hooks/set-state-in-effect` del linter ahora prohíbe.
+
+En la rama `main`, `PanTo` no mueve la cámara (ejercicio 4), tocar o arrastrar en el mapa de Lugares no hace nada (ejercicio 5), de modo que un lugar solo se puede crear desde *Usar mi ubicación*, y el visor de `CameraDialog` muestra un aviso en lugar de pedir la cámara (ejercicio 6). La entrada de archivos sí funciona desde el principio.
 
 ### Clientes de API (`src/api`)
 
@@ -247,9 +251,13 @@ El estado vive en `usePlacemarks`, un hook con el modelo de `useWeather`: carga 
 
 Los endpoints del laboratorio 8 conservan sus rutas y la forma de sus respuestas, de modo que los clientes del frontend no cambiaron. Cada llamada a Google se registra en la terminal con la key enmascarada (`mask_url`).
 
+En la rama `main`, `sniff_image` devuelve siempre `None`, así que toda foto se rechaza con `422` hasta resolver el ejercicio 7. Los lugares sin foto se crean igual.
+
 ### Service worker (`public/sw.js`)
 
 Dos cambios. Las fotos de los lugares, `/api/placemarks/<id>/photo`, son la excepción dentro de `/api/`: su URL es estable y el backend las declara inmutables, así que se guardan con la estrategia caché primero, igual que los archivos del bundle, y los lugares se ven con sus fotos sin conexión. Y las peticiones a Google Maps (`googleapis.com`, `gstatic.com`) no se interceptan, salvo las tipografías: el script, las teselas y las consultas a Places tienen su propia política de caché. La constante `CACHE` pasó a `weather-app-v3`.
+
+En la rama `main` la regla de las fotos está marcada como `TODO` (ejercicio 8): sin ella, la lista de lugares aparece sin conexión pero las imágenes no cargan.
 
 ### Proxy de Vite (`vite.config.js`)
 
@@ -288,24 +296,31 @@ curl -F name="x" -F latitude=-33.4 -F longitude=-70.6 -F "photo=@README.md;type=
 
 ## Experimenta con el código
 
-1. **Favoritos en el mapa.** Los favoritos son nombres de ciudad, sin coordenadas. En `SearchMap`, obtén las coordenadas de cada favorito con la geocodificación de Open-Meteo que ya usa `weatherApi.js`, y dibújalos como marcadores de otro color, con una `InfoWindow` que muestre el clima con el componente `Weather`. Cuida la cantidad de peticiones: las coordenadas de un favorito no cambian, así que guárdalas en `localStorage` con la estructura de `weatherCache.js`.
+Los ejercicios 1 a 8 completan partes que la rama `main` trae marcadas con `TODO` y comentarios numerados. Cada una es pequeña, y en cada una hay que leer la documentación de una API, que es la idea: las APIs de Google cambian, y saber leer su documentación vale más que recordar una llamada. Cuando termines un archivo, borra su línea `eslint-disable` y verifica que `yarn lint` no reclame nada.
 
-2. **Radio ajustable.** Reemplaza el radio fijo de 1,5 km de los hoteles por un `Slider` con las mismas marcas que la pantalla *Cerca de mí* de la clase 10, y dibuja el radio con el componente `Circle` de la biblioteca. La consulta debe hacerse en `onChangeCommitted`, no en cada movimiento del control. Agrega también un `ToggleButtonGroup` para elegir entre hoteles, hostales y campings, con `includedPrimaryTypes`.
+1. **La localidad más cercana.** Implementa `snapToNearestLocality` en `src/geo/locality.js`. El Geocoder de Maps JS (`geocoder.geocode({ location })`) devuelve una lista de resultados ordenados del más específico al más general; hay que filtrar los que corresponden a una localidad, elegir el mejor y armar el texto "Ciudad, Región, CC" que entiende Open-Meteo. Lee la [referencia del Geocoder](https://developers.google.com/maps/documentation/javascript/geocoding) y fíjate en la estructura de `address_components` y `types`. Prueba tocando el mar, el desierto y el centro de Santiago.
 
-3. **Editar un lugar.** Agrega al backend `PATCH /api/placemarks/{id}`, que acepte nombre, nota y dirección (sin foto), con sus pruebas en `backend/tests/`. En el frontend, reutiliza `PlacemarkForm` con los valores actuales. Piensa qué debe pasar con el formulario si la petición falla a medias.
+2. **Hoteles con Places API (New).** Completa `searchHotels` en `SearchMap` con `Place.searchNearby`. La [documentación de Nearby Search](https://developers.google.com/maps/documentation/javascript/nearby-search) describe la request; los campos que necesita `HotelMarkers` están en el comentario. Antes de probar, revisa que la key del frontend tenga autorizada Places API (New) y no la *legacy*: el error, si aparece, se ve en la pantalla y en la consola.
 
-4. **Fecha y lugar sobre la foto.** Antes de codificar la captura en `CameraDialog`, escribe sobre el canvas, con `fillText`, la fecha y las coordenadas del lugar, en una franja semitransparente abajo. Es lo que hacen las aplicaciones de cámara de "foto con ubicación". Haz lo mismo con las imágenes que llegan por la entrada de archivos, en `resizeImage`.
+3. **Marcadores y ventana de los hoteles.** Implementa el JSX de `HotelMarkers`: un `AdvancedMarker` con `Pin` por hotel y una sola `InfoWindow`, la del seleccionado. Compara con `PlacemarkMarkers`, que hace lo mismo para los lugares, y con la [referencia de la biblioteca](https://visgl.github.io/react-google-maps/docs/api-reference/components/info-window). Nota que `location` es un `LatLng` de Google y no un literal.
 
-5. **Errores que el usuario entiende.** Provoca un `413` subiendo una imagen grande (baja el límite en el backend momentáneamente) y un `422` con un archivo que no sea imagen, y revisa qué muestra el formulario. `ApiError` trae el estado y el `detail` del backend; traduce esos casos a mensajes en español, y deja el mensaje genérico para el resto. Agrega al backend una prueba de que un GIF se rechaza.
+4. **Mover la cámara.** Completa `PanTo` con `useMap()`: la instancia de `google.maps.Map` tiene `panTo`, `getZoom` y `setZoom`. Con esto, la búsqueda en el mapa centra la localidad encontrada y *Ver en el mapa* lleva al lugar. Explica, con lo que dice la sección *La key, la cuota y el costo*, por qué se mueve la cámara así y no cambiando `center` o la `key` del `<Map>`.
 
-6. **Lugares pendientes.** Sin conexión no se pueden crear lugares, y perder la foto que acabas de tomar en la cordillera es un mal negocio. Guarda los lugares creados sin conexión en una cola en `localStorage` (la foto, convertida a texto con `FileReader.readAsDataURL`), muéstralos en la lista marcados como pendientes, y envíalos al backend cuando `useConnectionStatus` indique que la red volvió. Toma como modelo el efecto de `usePlacemarks`, que ya depende del estado de la conexión.
+5. **Tocar y arrastrar.** En `PlacesPage`, haz que tocar el mapa cree el borrador (`handleMapClick`, con `event.detail.latLng`) y que el marcador borrador sea arrastrable, actualizando `draft` en `onDragEnd`. Los dos eventos entregan las coordenadas en formas distintas, un literal y un `LatLng`; averigua cuál es cuál en la [referencia de `Map`](https://visgl.github.io/react-google-maps/docs/api-reference/components/map) y la de [`AdvancedMarker`](https://visgl.github.io/react-google-maps/docs/api-reference/components/advanced-marker).
 
-7. **Navegación con rutas.** La `InfoWindow` de un lugar podría llevar a una ficha propia, en `/places/:id`, con la foto grande, un mapa pequeño con `gestureHandling="cooperative"` y el botón *Cómo llegar* con un enlace a `https://www.google.com/maps/dir/?api=1&destination=<lat>,<lng>`, que no usa key ni consume cuota. Usa `useParams` de React Router y el endpoint `GET /api/placemarks/{id}`, que el frontend todavía no usa.
+6. **El visor de la cámara.** Implementa el efecto de `CameraDialog` con [`getUserMedia`](https://developer.mozilla.org/docs/Web/API/MediaDevices/getUserMedia): pedir el stream, mostrarlo en el `<video>`, traducir los errores y, sobre todo, detener las pistas en la limpieza del efecto. Prueba con la cámara simulada de Chrome (ver *Cómo probar lo nuevo*) y con la real; en este último caso, cierra el diálogo y comprueba que la luz de la cámara se apaga. Luego cambia de cámara con el botón del encabezado y explica qué hace el efecto en ese momento.
 
-8. **La key bajo observación.** Este ejercicio no produce código.
-   * En *APIs & Services*, *Metrics*, revisa cuántas cargas de mapa y cuántas búsquedas de Places llevas hechas. Entra y sal de la pestaña *En el mapa* diez veces y vuelve a mirar: `reuseMaps` debería notarse.
-   * Quita momentáneamente `http://localhost:5173/*` de las restricciones de la key del frontend y recarga el mapa. Sigue el error desde la consola del navegador hasta lo que ve el usuario. Después restablece la restricción.
-   * En `searchHotels`, quita `rating` y `userRatingCount` de `fields` y compara en la [tabla de SKUs de Places](https://developers.google.com/maps/billing-and-pricing/sku-details) en qué nivel de precio queda la búsqueda con y sin esos campos.
+7. **Validar la imagen en el servidor.** Implementa `sniff_image` en `backend/app/placemarks.py`, que reconoce JPEG, PNG y WebP por sus primeros bytes. Tres pruebas de `backend/tests/test_placemarks.py` fallan hasta entonces: córrelas con `yarn test:api` y hazlas pasar. Después, con `curl`, sube un archivo de texto declarado como `image/png` y un PNG declarado como `image/jpeg`, y explica por qué el servidor no puede confiar en el `Content-Type`.
+
+8. **Fotos sin conexión.** Agrega al service worker la regla que guarda las fotos de los lugares con la estrategia caché primero, antes de la línea que deja pasar el resto de `/api/`. Pruébalo con `yarn build && yarn preview` y el modo *Offline* del panel *Network*: las imágenes deben verse. Explica por qué esta regla es correcta para las fotos y sería un error para `GET /api/placemarks`.
+
+### Para seguir
+
+Si terminaste, tres ideas más grandes, sin guía:
+
+* **Favoritos en el mapa.** Los favoritos son nombres de ciudad, sin coordenadas. Obtén las coordenadas con la geocodificación de Open-Meteo que ya usa `weatherApi.js`, guárdalas en `localStorage` con la estructura de `weatherCache.js`, y dibújalos en `SearchMap` como marcadores de otro color, con una `InfoWindow` que muestre el clima con el componente `Weather`.
+* **Radio ajustable.** Reemplaza el radio fijo de los hoteles por un `Slider` con las marcas de la pantalla *Cerca de mí* de la clase 10, dibuja el radio con el componente `Circle`, y consulta solo en `onChangeCommitted`.
+* **Lugares pendientes.** Sin conexión no se pueden crear lugares, y perder la foto que acabas de tomar en la cordillera es un mal negocio. Guarda los lugares creados sin conexión en una cola en `localStorage` (la foto, como texto con `FileReader.readAsDataURL`), muéstralos marcados como pendientes, y envíalos al backend cuando `useConnectionStatus` indique que la red volvió.
 
 ## Anexo: lo básico de Vite
 
@@ -322,3 +337,41 @@ El objeto `"scripts"` de `package.json` declara las tareas disponibles:
 * `preview`: sirve la aplicación construida, junto con el backend, para probarla como se vería en producción.
 
 En `vite.config.js` hay dos agregados respecto de la configuración por defecto: el proxy hacia el backend, descrito más arriba, y `build.manifest`, que deja en `dist/assets-manifest.json` la lista de archivos que el service worker precachea al instalarse.
+
+---
+
+# Solución
+
+Esta rama (`solution`) contiene el código de `main` con los ejercicios 1 a 8 resueltos. Úsala como referencia después de intentarlos: el valor del laboratorio está en leer la documentación y equivocarse primero.
+
+## 1. La localidad más cercana
+
+En `src/geo/locality.js`. `geocoder.geocode({ location })` devuelve `{ results }`, y cada resultado trae `types` y `address_components`. El filtro descarta los tipos demasiado finos (`BLOCKED`) y conserva los de `ALLOWED`; `rank` ordena por la prioridad de `PRIORITY`, de modo que una `locality` gana a una región. Los componentes se buscan por tipo con un pequeño `get(type)`; la región va en `short_name` ("RM" en vez de "Región Metropolitana de Santiago") porque es lo que mejor entiende Open-Meteo. La posición devuelta es `best.geometry.location.toJSON()`, el centroide de la localidad: por eso el marcador se mueve después del click.
+
+## 2. Hoteles con Places API (New)
+
+En `searchHotels` de `SearchMap`. La request lleva `fields` (obligatorio, y lo que define el SKU que se cobra), `locationRestriction` con un círculo, `includedTypes: ['lodging']`, `maxResultCount`, `rankPreference: DISTANCE`, y `language` y `region`. La respuesta es `{ places }`, un arreglo de objetos `Place` con solo los campos pedidos. Si la key no tiene autorizada Places API (New), la promesa rechaza y el `catch` muestra el mensaje de Google; `LegacyApiNotActivatedMapError` es la señal de que se habilitó la Places API antigua en lugar de la nueva.
+
+## 3. Marcadores y ventana de los hoteles
+
+En `HotelMarkers.jsx`, con la misma estructura que `PlacemarkMarkers`: un `useState` con el id seleccionado, un `AdvancedMarker` por hotel con `Pin` de `theme.palette.secondary`, y una sola `InfoWindow` cuando hay seleccionado, con `pixelOffset={[0, -36]}` para que no tape el pin. `hotel.location` es un `LatLng` de Google, con métodos `lat()` y `lng()`, y el marcador espera un literal: de ahí el `toJSON()`.
+
+## 4. Mover la cámara
+
+En `PanTo.jsx`: `useMap()` entrega la instancia, y el efecto llama a `map.panTo({ lat, lng })` y, si el zoom actual es menor que el pedido, a `map.setZoom(zoom)`. La alternativa de cambiar `center` convertiría la cámara en controlada, y React tendría que actualizar el estado en cada movimiento del usuario; la de cambiar la `key` del `<Map>` desmonta y vuelve a montar el mapa, que es una carga cobrada. `panTo` no cuesta nada.
+
+## 5. Tocar y arrastrar
+
+En `PlacesPage.jsx`. El `onClick` de `<Map>` trae `event.detail.latLng` ya como literal `{ lat, lng }`, o `null` si se tocó un control del mapa; sin conexión se ignora. El `onDragEnd` del `AdvancedMarker`, en cambio, es un `google.maps.MapMouseEvent` de la API de Google, y su `latLng` es un `LatLng` con métodos: `{ lat: e.latLng.lat(), lng: e.latLng.lng() }`. Dos formas para el mismo dato, porque la primera la normaliza la biblioteca de React y la segunda viene cruda de Google.
+
+## 6. El visor de la cámara
+
+En `CameraDialog.jsx`. El efecto pide el stream con `getUserMedia({ video: { facingMode: { ideal: facingMode } }, audio: false })` y lo asigna a `videoRef.current.srcObject`. La limpieza detiene cada pista con `track.stop()`; sin eso, la luz de la cámara sigue encendida con el diálogo cerrado. La bandera `cancelled` cubre el caso en que el usuario cierra el diálogo antes de que el permiso se resuelva: el stream llega cuando ya nadie lo quiere, y se detiene de inmediato. Cambiar de cámara cambia `facingMode`, que está en las dependencias: React ejecuta la limpieza (suelta la cámara actual) y vuelve a correr el efecto con la nueva preferencia.
+
+## 7. Validar la imagen en el servidor
+
+En `sniff_image` de `backend/app/placemarks.py`: `head.startswith(magic)` para cada firma de `SIGNATURES`, con la salvedad de WebP, cuya firma `RIFF` es la de cualquier archivo RIFF y recién los bytes 8 a 12 dicen `WEBP`. El `Content-Type` lo escribe el cliente y puede decir cualquier cosa; los primeros bytes los escribe el formato. Por eso `read_photo` compara lo declarado con lo detectado y responde `422` si no coinciden. Las tres pruebas pasan con `yarn test:api`.
+
+## 8. Fotos sin conexión
+
+En `public/sw.js`, antes de la línea que deja pasar `/api/`: si la ruta cumple `PHOTO_PATH`, `cacheFirst`. Es correcto para las fotos porque su URL es estable y el backend las declara inmutables: una misma URL siempre devuelve lo mismo, igual que los archivos del bundle con hash. Sería un error para `GET /api/placemarks`, cuya respuesta cambia cada vez que se crea o elimina un lugar: con caché primero, la lista nunca mostraría uno nuevo. Esa lista se guarda en `localStorage` con su fecha, por la aplicación, para poder decir de cuándo es.
