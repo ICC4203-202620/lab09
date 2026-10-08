@@ -4,14 +4,14 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n WEB,API -c cyan,magenta \"vite\" \"yarn -s dev:api\"",
+    "dev": "concurrently -k -n WEB,API -c cyan,magenta \"vite\" \"[[ -n \\`command -v yarn\\` ]] && yarn -s dev:api || npm run -s dev:api\"",
     "dev:web": "vite",
     "dev:api": "cd backend && .venv/bin/uvicorn app.main:app --reload --env-file ../.env",
     "setup:api": "cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt",
     "test:api": "cd backend && .venv/bin/pytest -q",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "concurrently -k -n WEB,API -c cyan,magenta \"vite preview\" \"yarn -s dev:api\""
+    "preview": "concurrently -k -n WEB,API -c cyan,magenta \"vite preview\" \"[[ -n \\`command -v yarn\\` ]] && yarn -s dev:api || npm run -s dev:api\""
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
