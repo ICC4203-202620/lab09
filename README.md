@@ -272,7 +272,7 @@ En la rama `main` la regla de las fotos está marcada como `TODO` (ejercicio 8):
 ```sh
 # macOS
 open -na "Google Chrome" --args --use-fake-device-for-media-stream --use-fake-ui-for-media-stream
-# Windows
+# Windows (y Linux, cambiando 'chrome.exe' por el ejecutable correspondiente y manteniendo los argumentos)
 chrome.exe --use-fake-device-for-media-stream --use-fake-ui-for-media-stream
 ```
 
